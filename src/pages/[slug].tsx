@@ -24,7 +24,6 @@ export default function Page(data: any) {
   } = data.parameters;
 
   const useMgid = Number(isMgid) === 1;
-
   useEffect(() => {
     try {
       // Giữa bài: nếu dùng MGID chèn widget MGID, nếu không dùng Taboola chèn div Taboola
