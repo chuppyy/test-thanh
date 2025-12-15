@@ -199,7 +199,7 @@ export default function Page(props: PageProps) {
 
             <h1>{article.name}</h1>
             <p className="mb-4 text-lg">
-              Posted: {formatDate(article.dateTimeStart)}
+              Posted: {formatDate(article.dateTimeStart || "")}
             </p>
 
             <Suspense fallback={<p>Loading ...</p>}>
