@@ -316,7 +316,7 @@ export async function getStaticProps({ params }: { params: any }) {
   try {
     const slug = params?.slug as string | undefined;
     const id = getIdFromSlug(slug);
-
+console.log("API /News/news-detailnew response:", id);
     // ✅ API của bạn trả List<NewsMainModel> (ví dụ 2 bài)
     const response = await fetch(
       `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
