@@ -64,7 +64,8 @@ export default function Page(props: PageProps) {
     const arr = Array.isArray(props.data) ? props.data : [];
     return arr.filter((x) => x && !x.IsDeleted);
   }, [props.data]);
-
+ console.log("Bài đầu tiên (render):", props.data?.[0]);
+ console.log("Bài đầu đ(render):", list);
   // ✅ chỉ render bài đầu, scroll thì bung thêm
   const [visible, setVisible] = useState<NewsMainModel[]>(() =>
     list.length ? [list[0]] : []
@@ -322,8 +323,7 @@ console.log("API /News/news-detailnew response:", id);
       `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
     ).then((res) => res.json());
     console.log("API /News/news-detailnew response:", response);
-     const jsontest = await response.json();
- console.log("API /News/news-detailnew response:", jsontest);
+    
     const parameters: PageParameters = {
       videoScriptSrc:
         "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
