@@ -147,14 +147,14 @@ export default function Page(props: PageProps) {
   return (
     <>
       <Head>
-        <title>{first ? `${first.Name}-${first.UserCode}` : "News"}</title>
-        {first?.AvatarLink && (
-          <meta property="og:image" content={first.AvatarLink} />
+        <title>{first ? `${first.name}-${first.userCode}` : "News"}</title>
+        {first?.avatarLink && (
+          <meta property="og:image" content={first.avatarLink} />
         )}
         {first && (
           <meta
             property="og:title"
-            content={`${first.Name}-${first.UserCode}`}
+            content={`${first.name}-${first.userCode}`}
           />
         )}
       </Head>
@@ -197,15 +197,15 @@ export default function Page(props: PageProps) {
               />
             )}
 
-            <h1>{article.Name}</h1>
+            <h1>{article.name}</h1>
             <p className="mb-4 text-lg">
-              Posted: {formatDate(article.DateTimeStart)}
+              Posted: {formatDate(article.dateTimeStart)}
             </p>
 
             <Suspense fallback={<p>Loading ...</p>}>
               <article
                 className="content"
-                dangerouslySetInnerHTML={{ __html: article.Content }}
+                dangerouslySetInnerHTML={{ __html: article.content }}
               />
             </Suspense>
 
