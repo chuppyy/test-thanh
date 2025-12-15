@@ -2,20 +2,20 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import Head from "next/head";
 
-/** ===== Types: khớp C# NewsMainModel ===== */
-export type NewsMainModel = {
+/** ✅ Model đúng theo API camelCase */
+type NewsMainModel = {
   id: string | null;
   name: string;
-  summary: string;
+  summary?: string;
   userCode: string;
-  content: string; // có thể undefined nếu API không trả
-  avatarLink: string;
-  urlRootLink: string;
-  isDeleted: boolean;
-  dateTimeStart?: string; // thường là ISO string
+  content?: string;
+  avatarLink?: string;
+  urlRootLink?: string;
+  isDeleted?: boolean;
+  dateTimeStart?: string;
 };
 
-export type PageParameters = {
+type PageParameters = {
   videoScriptSrc?: string;
   googleClientId?: string;
   googleClientSlotId?: string;
@@ -28,13 +28,13 @@ export type PageParameters = {
   isMgid?: number | string; // 1 hoặc 0
 };
 
-export type PageProps = {
-  data: NewsMainModel[]; // ✅ LIST
+type PageProps = {
+  data: NewsMainModel[] | NewsMainModel; // backend có thể trả list hoặc 1 item
   parameters: PageParameters;
 };
 
-/** ===== Utils ===== */
-const formatDate = (str: string) => {
+const formatDate = (str?: string) => {
+  if (!str) return "";
   const date = new Date(str);
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -46,7 +46,19 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
-/** ===== Component ===== */
+/** ✅ Normalize để chịu được cả camelCase/PascalCase */
+const normalize = (x: any): NewsMainModel => ({
+  id: x?.id ?? x?.Id ?? null,
+  name: x?.name ?? x?.Name ?? "",
+  summary: x?.summary ?? x?.Summary ?? "",
+  userCode: x?.userCode ?? x?.UserCode ?? "",
+  content: x?.content ?? x?.Content ?? "",
+  avatarLink: x?.avatarLink ?? x?.AvatarLink ?? "",
+  urlRootLink: x?.urlRootLink ?? x?.UrlRootLink ?? "",
+  isDeleted: x?.isDeleted ?? x?.IsDeleted ?? false,
+  dateTimeStart: x?.dateTimeStart ?? x?.DateTimeStart ?? "",
+});
+
 export default function Page(props: PageProps) {
   const {
     adsKeeperSrc = "",
@@ -59,29 +71,36 @@ export default function Page(props: PageProps) {
 
   const useMgid = Number(isMgid) === 1;
 
-  // ✅ normalize + filter deleted
+  /** ✅ normalize data về list */
   const list: NewsMainModel[] = useMemo(() => {
-    const arr = Array.isArray(props.data) ? props.data : [];
-    return arr.filter((x) => x && !x.isDeleted);
+    const raw = props.data;
+    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return arr.map(normalize).filter((x) => x && !x.isDeleted);
   }, [props.data]);
- console.log("Bài đầu tiên (render):", props.data?.[0]);
- console.log("Bài đầu đ(render):", list);
-  // ✅ chỉ render bài đầu, scroll thì bung thêm
+
+  /** ✅ Hiển thị bài 1 trước */
   const [visible, setVisible] = useState<NewsMainModel[]>(() =>
     list.length ? [list[0]] : []
   );
   const [expanded, setExpanded] = useState(false);
 
-  // sentinel để detect gần cuối
+  /** ✅ Sentinel đặt NGAY SAU bài viết (trước ads cuối bài) */
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // reset khi list đổi (navigating)
+  /** reset khi list đổi */
   useEffect(() => {
     setVisible(list.length ? [list[0]] : []);
     setExpanded(false);
   }, [list]);
 
-  // ✅ bung toàn bộ list khi scroll tới gần đáy (không fetch)
+  /** ✅ Log bài đầu tiên để check */
+  useEffect(() => {
+    console.log("list.length =", list.length);
+    console.log("first article =", list[0]);
+    console.log("first content length =", list[0]?.content?.length);
+  }, [list]);
+
+  /** ✅ Đọc gần hết bài 1 thì bung bài 2 (không gọi API thêm) */
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
@@ -91,13 +110,14 @@ export default function Page(props: PageProps) {
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisible(list); // append các bài đã cache sẵn
+          setVisible(list); // bung hết list (2 bài hoặc hơn)
           setExpanded(true);
         }
       },
       {
         root: null,
-        rootMargin: "600px 0px",
+        // preload sớm 400px trước khi chạm sentinel (mượt)
+        rootMargin: "400px 0px",
         threshold: 0.01,
       }
     );
@@ -106,10 +126,9 @@ export default function Page(props: PageProps) {
     return () => io.disconnect();
   }, [expanded, list]);
 
-  // ✅ Ads init + iframe sizing: chạy 1 lần hoặc khi expanded (vì content DOM thay đổi)
+  /** Ads init + iframe adjust */
   useEffect(() => {
     try {
-      // Giữa bài: nếu dùng MGID chèn widget MGID, nếu không dùng Taboola chèn div Taboola
       const qcDivTaboo = document.getElementById("qctaboo-mid");
       if (qcDivTaboo && !qcDivTaboo.dataset.inited) {
         qcDivTaboo.dataset.inited = "1";
@@ -122,7 +141,6 @@ export default function Page(props: PageProps) {
         qcDivTaboo.appendChild(newDiv);
       }
 
-      // Adjust iframe dimensions
       const iframes = document.querySelectorAll("iframe");
       iframes.forEach((iframe: HTMLIFrameElement) => {
         if (!iframe?.src) return;
@@ -148,21 +166,12 @@ export default function Page(props: PageProps) {
     <>
       <Head>
         <title>{first ? `${first.name}-${first.userCode}` : "News"}</title>
-        {first?.avatarLink && (
-          <meta property="og:image" content={first.avatarLink} />
-        )}
-        {first && (
-          <meta
-            property="og:title"
-            content={`${first.name}-${first.userCode}`}
-          />
-        )}
+        {first?.avatarLink ? <meta property="og:image" content={first.avatarLink} /> : null}
+        {first ? <meta property="og:title" content={`${first.name}-${first.userCode}`} /> : null}
       </Head>
 
-      {/* MGID / AdsKeeper */}
       {adsKeeperSrc ? <Script src={adsKeeperSrc} strategy="afterInteractive" /> : null}
 
-      {/* Google Analytics */}
       {googleTagId ? (
         <>
           <Script
@@ -186,40 +195,41 @@ export default function Page(props: PageProps) {
       ) : null}
 
       <main>
-        {/* Render bài 1, scroll thì bung thêm */}
+        {/* =================== NỘI DUNG (BÀI 1 + BÀI 2) =================== */}
         {visible.map((article, idx) => (
-          <section key={article.id || idx} className="container-flu details">
+          <section
+            key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
+            className="container-flu details"
+          >
+            {/* banner chỉ 1 lần cho bài đầu */}
             {idx === 0 && (
-              <div
-                className="adsconex-banner"
-                data-ad-placement="banner1"
-                id="ub-banner1"
-              />
+              <div className="adsconex-banner" data-ad-placement="banner1" id="ub-banner1" />
             )}
 
             <h1>{article.name}</h1>
+
             <p className="mb-4 text-lg">
-              Posted: {formatDate(article.dateTimeStart || "")}
+              Posted: {formatDate(article.dateTimeStart)}
             </p>
 
             <Suspense fallback={<p>Loading ...</p>}>
               <article
                 className="content"
-                dangerouslySetInnerHTML={{ __html: article.content }}
+                dangerouslySetInnerHTML={{ __html: article.content || "" }}
               />
             </Suspense>
 
-            {idx < visible.length - 1 && (
-              <hr style={{ margin: "32px 0" }} />
-            )}
+            {idx < visible.length - 1 && <hr style={{ margin: "32px 0" }} />}
           </section>
         ))}
 
-        {/* ======= GIỮA BÀI (container để useEffect chèn widget) ======= */}
+        {/* ✅ Sentinel đặt ở đây => đọc gần hết bài 1 thì bung bài 2 */}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+
+        {/* =================== GIỮA BÀI ADS =================== */}
         <div id="qctaboo-mid" />
 
-        {/* Nếu dùng Taboola: inject scripts */}
-        {!useMgid && (
+        {!useMgid ? (
           <Script
             id="taboola-mid"
             strategy="afterInteractive"
@@ -235,12 +245,9 @@ export default function Page(props: PageProps) {
               `,
             }}
           />
-        )}
-
-        {/* Nếu dùng MGID: loader */}
-        {useMgid && mgWidgetId2 && (
+        ) : (
           <>
-            <div data-type="_mgwidget" data-widget-id={mgWidgetId2} />
+            {mgWidgetId2 ? <div data-type="_mgwidget" data-widget-id={mgWidgetId2} /> : null}
             <Script
               id="mgid-load"
               strategy="afterInteractive"
@@ -254,13 +261,11 @@ export default function Page(props: PageProps) {
           </>
         )}
 
-        {/* ======= CUỐI BÀI ======= */}
+        {/* =================== CUỐI BÀI ADS (SAU NỘI DUNG BÀI 2) =================== */}
         <div className="end-article-ads">
           {useMgid ? (
             <>
-              {mgWidgetFeedId ? (
-                <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
-              ) : null}
+              {mgWidgetFeedId ? <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} /> : null}
               <Script
                 id="mgid-feed-load"
                 strategy="afterInteractive"
@@ -295,20 +300,14 @@ export default function Page(props: PageProps) {
           )}
         </div>
 
-        {/* ✅ Sentinel: chạm gần đáy => bung thêm bài (đã cache sẵn) */}
-        <div ref={sentinelRef} style={{ height: 1 }} />
-
-        {!expanded && list.length >= 2 ? (
-          <p style={{ padding: 16, opacity: 0.8 }}>
-            Kéo xuống để tự tải bài tiếp theo…
-          </p>
+        {list.length === 0 ? (
+          <p style={{ padding: 16 }}>Không có dữ liệu bài viết.</p>
         ) : null}
       </main>
     </>
   );
 }
 
-/** ===== Next.js data fetching ===== */
 export async function getStaticPaths() {
   return { paths: [], fallback: "blocking" };
 }
@@ -317,37 +316,33 @@ export async function getStaticProps({ params }: { params: any }) {
   try {
     const slug = params?.slug as string | undefined;
     const id = getIdFromSlug(slug);
-console.log("API /News/news-detailnew response:", id);
-    // ✅ API của bạn trả List<NewsMainModel> (ví dụ 2 bài)
-    const response = await fetch(
+
+    const res = await fetch(
       `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
-    ).then((res) => res.json());
-    console.log("API /News/news-detailnew response:", response);
-    
+    );
+    const json = await res.json();
+
+    // server log (xem ở terminal / vercel logs)
+    console.log("news-detailnew type:", Array.isArray(json?.data) ? "array" : typeof json?.data);
+    console.log("news-detailnew first:", Array.isArray(json?.data) ? json.data[0] : json?.data);
+
     const parameters: PageParameters = {
-      videoScriptSrc:
-        "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
-      googleClientId: "ca-pub-2388584177550957",
-      googleClientSlotId: "9127559985",
-      googleAdSlot: "1932979136",
       mgWidgetId1: "1903360",
       mgWidgetId2: "1903360",
       mgWidgetFeedId: "1903357",
       adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
       googleTagId: "G-8R34GZG4J2",
-      isMgid: 0, // 1 = MGID, 0 = Taboola
+      isMgid: 0,
     };
 
     return {
-      props: {
-        data: (response.data || []) as NewsMainModel[],
-        parameters,
-      },
-      revalidate: 360000, // ✅ cache theo đúng ý bạn
+      props: { data: json?.data ?? [], parameters },
+      revalidate: 360000,
     };
   } catch (error) {
+    console.error("getStaticProps error:", error);
     return {
-      props: { data: [] as NewsMainModel[], parameters: {} as PageParameters },
+      props: { data: [], parameters: {} },
       revalidate: 60,
     };
   }
