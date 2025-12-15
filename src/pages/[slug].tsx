@@ -1,34 +1,117 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import Head from "next/head";
-import RewardedAd from "@/components/navbars/reward";
 
+/** ===== Types: khớp C# NewsMainModel ===== */
+export type NewsMainModel = {
+  Id: string;
+  Name: string;
+  Summary: string;
+  UserCode: string;
+  Content: string;
+  AvatarLink: string;
+  UrlRootLink: string;
+  IsDeleted: boolean;
+  DateTimeStart: string; // backend trả JSON thường là ISO string
+};
+
+export type PageParameters = {
+  videoScriptSrc?: string;
+  googleClientId?: string;
+  googleClientSlotId?: string;
+  googleAdSlot?: string;
+  mgWidgetId1?: string;
+  mgWidgetId2?: string;
+  mgWidgetFeedId?: string;
+  adsKeeperSrc?: string;
+  googleTagId?: string;
+  isMgid?: number | string; // 1 hoặc 0
+};
+
+export type PageProps = {
+  data: NewsMainModel[]; // ✅ LIST
+  parameters: PageParameters;
+};
+
+/** ===== Utils ===== */
 const formatDate = (str: string) => {
   const date = new Date(str);
+  if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 };
 
-export default function Page(data: any) {
-  const article = data.data;
+const getIdFromSlug = (slug?: string) => {
+  if (!slug) return "";
+  const s = String(slug);
+  return s.slice(s.lastIndexOf("-") + 1);
+};
+
+/** ===== Component ===== */
+export default function Page(props: PageProps) {
   const {
-    videoScriptSrc,
-    googleClientId,
-    googleClientSlotId,
-    googleAdSlot,
-    mgWidgetId1,
-    mgWidgetId2,
-    mgWidgetFeedId,
-    adsKeeperSrc,
-    googleTagId,
-    isMgid, // <- flag bạn phải truyền vào parameters (1 hoặc 0)
-  } = data.parameters;
+    adsKeeperSrc = "",
+    googleTagId = "",
+    mgWidgetId1 = "",
+    mgWidgetId2 = "",
+    mgWidgetFeedId = "",
+    isMgid = 0,
+  } = props.parameters || {};
 
   const useMgid = Number(isMgid) === 1;
+
+  // ✅ normalize + filter deleted
+  const list: NewsMainModel[] = useMemo(() => {
+    const arr = Array.isArray(props.data) ? props.data : [];
+    return arr.filter((x) => x && !x.IsDeleted);
+  }, [props.data]);
+
+  // ✅ chỉ render bài đầu, scroll thì bung thêm
+  const [visible, setVisible] = useState<NewsMainModel[]>(() =>
+    list.length ? [list[0]] : []
+  );
+  const [expanded, setExpanded] = useState(false);
+
+  // sentinel để detect gần cuối
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // reset khi list đổi (navigating)
+  useEffect(() => {
+    setVisible(list.length ? [list[0]] : []);
+    setExpanded(false);
+  }, [list]);
+
+  // ✅ bung toàn bộ list khi scroll tới gần đáy (không fetch)
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    if (expanded) return;
+    if (list.length < 2) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisible(list); // append các bài đã cache sẵn
+          setExpanded(true);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "600px 0px",
+        threshold: 0.01,
+      }
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, [expanded, list]);
+
+  // ✅ Ads init + iframe sizing: chạy 1 lần hoặc khi expanded (vì content DOM thay đổi)
   useEffect(() => {
     try {
       // Giữa bài: nếu dùng MGID chèn widget MGID, nếu không dùng Taboola chèn div Taboola
       const qcDivTaboo = document.getElementById("qctaboo-mid");
-      if (qcDivTaboo) {
+      if (qcDivTaboo && !qcDivTaboo.dataset.inited) {
+        qcDivTaboo.dataset.inited = "1";
         const newDiv = document.createElement("div");
         if (useMgid) {
           newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
@@ -37,10 +120,11 @@ export default function Page(data: any) {
         }
         qcDivTaboo.appendChild(newDiv);
       }
-      // Adjust iframe dimensions (giữ nguyên)
+
+      // Adjust iframe dimensions
       const iframes = document.querySelectorAll("iframe");
       iframes.forEach((iframe: HTMLIFrameElement) => {
-        if (!iframe) return;
+        if (!iframe?.src) return;
         if (iframe.src.includes("twitter")) {
           iframe.style.height = window.innerWidth <= 525 ? "650px" : "827px";
           iframe.style.width = window.innerWidth <= 525 ? "100%" : "550px";
@@ -55,116 +139,144 @@ export default function Page(data: any) {
     } catch (err) {
       console.error("Error with ads", err);
     }
-  }, [googleClientId, googleAdSlot, mgWidgetId1, mgWidgetId2, useMgid]);
+  }, [useMgid, mgWidgetId1, expanded]);
+
+  const first = visible[0];
 
   return (
     <>
       <Head>
-        <title>{article.name + "-" + article.userCode}</title>
-        <meta property="og:image" content={article.avatarLink} />
-        <meta property="og:title" content={article.name + "-" + article.userCode} />
+        <title>{first ? `${first.Name}-${first.UserCode}` : "News"}</title>
+        {first?.AvatarLink && (
+          <meta property="og:image" content={first.AvatarLink} />
+        )}
+        {first && (
+          <meta
+            property="og:title"
+            content={`${first.Name}-${first.UserCode}`}
+          />
+        )}
       </Head>
 
-      <Script src={adsKeeperSrc} async></Script>
-      <Script id="gg-1" strategy="lazyOnload" src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} />
-      <Script id="gg-2" strategy="lazyOnload">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${googleTagId}');
-        `}
-      </Script>
+      {/* MGID / AdsKeeper */}
+      {adsKeeperSrc ? <Script src={adsKeeperSrc} strategy="afterInteractive" /> : null}
+
+      {/* Google Analytics */}
+      {googleTagId ? (
+        <>
+          <Script
+            id="gg-1"
+            strategy="afterInteractive"
+            src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
+          />
+          <Script
+            id="gg-2"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${googleTagId}');
+              `,
+            }}
+          />
+        </>
+      ) : null}
 
       <main>
-        <div className="container-flu details">
-          <div className="adsconex-banner" data-ad-placement="banner1" id="ub-banner1"></div>
-          <h1>{article.name}</h1>
-          {/* Banner FEJI */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            window.unibotshb = window.unibotshb || { cmd: [] };
-            unibotshb.cmd.push(()=>{ ubHB("feji.io_long"); });
-          `
-        }}
-      />
-      
-      {/* Video Player FEJI */}
-      <div id="div-ub-feji.io_1723454353847">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.unibots = window.unibots || { cmd: [] };
-              unibots.cmd.push(function() { unibotsPlayer("feji.io_1723454353847") });
-            `
-          }}
-        />
-      </div>
-          <p className="mb-4 text-lg">Posted: {formatDate(article.dateTimeStart)}</p>
+        {/* Render bài 1, scroll thì bung thêm */}
+        {visible.map((article, idx) => (
+          <section key={article.Id || idx} className="container-flu details">
+            {idx === 0 && (
+              <div
+                className="adsconex-banner"
+                data-ad-placement="banner1"
+                id="ub-banner1"
+              />
+            )}
 
-          <Suspense fallback={<p>Loading ...</p>}>
-            <article className="content" dangerouslySetInnerHTML={{ __html: article.content }} />
-          </Suspense>
-        </div>
+            <h1>{article.Name}</h1>
+            <p className="mb-4 text-lg">
+              Posted: {formatDate(article.DateTimeStart)}
+            </p>
 
-        {/* ======= GIỮA BÀI (conditional render) ======= */}
-        <div id="qctaboo-mid"></div>
+            <Suspense fallback={<p>Loading ...</p>}>
+              <article
+                className="content"
+                dangerouslySetInnerHTML={{ __html: article.Content }}
+              />
+            </Suspense>
 
-        {/* Nếu dùng Taboola: inject Taboola scripts */}
+            {idx < visible.length - 1 && (
+              <hr style={{ margin: "32px 0" }} />
+            )}
+          </section>
+        ))}
+
+        {/* ======= GIỮA BÀI (container để useEffect chèn widget) ======= */}
+        <div id="qctaboo-mid" />
+
+        {/* Nếu dùng Taboola: inject scripts */}
         {!useMgid && (
-          <>            
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `
-                  window._taboola = window._taboola || [];
-                  _taboola.push({
-                    mode: 'thumbs-feed-01-b',
-                    container: 'taboola-below-mid-article',
-                    placement: 'Mid article',
-                    target_type: 'mix'
-                  });
-                `,
-              }}
-            />
-          </>
+          <Script
+            id="taboola-mid"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                window._taboola = window._taboola || [];
+                _taboola.push({
+                  mode: 'thumbs-feed-01-b',
+                  container: 'taboola-below-mid-article',
+                  placement: 'Mid article',
+                  target_type: 'mix'
+                });
+              `,
+            }}
+          />
         )}
 
-        {/* Nếu dùng MGID: loader mgid (ở giữa bài có thể thêm widget div phía trên bằng useEffect) */}
-        {useMgid && (
+        {/* Nếu dùng MGID: loader */}
+        {useMgid && mgWidgetId2 && (
           <>
-            <div data-type="_mgwidget" data-widget-id={mgWidgetId2}></div>
-            <script
+            <div data-type="_mgwidget" data-widget-id={mgWidgetId2} />
+            <Script
+              id="mgid-load"
+              strategy="afterInteractive"
               dangerouslySetInnerHTML={{
                 __html: `
                   (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
                   (window,"_mgq");
                 `,
               }}
-              async
             />
           </>
         )}
 
-        {/* ======= CUỐI BÀI (conditional render) ======= */}
+        {/* ======= CUỐI BÀI ======= */}
         <div className="end-article-ads">
-          {/* MGID feed always (nếu bạn muốn luôn show feed khi isMgid) */}
           {useMgid ? (
             <>
-              <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId}></div>
-              <script
+              {mgWidgetFeedId ? (
+                <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
+              ) : null}
+              <Script
+                id="mgid-feed-load"
+                strategy="afterInteractive"
                 dangerouslySetInnerHTML={{
-                  __html: `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
-                  (window,"_mgq");`,
+                  __html: `
+                    (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
+                    (window,"_mgq");
+                  `,
                 }}
-                async
               />
             </>
           ) : (
-            // Taboola cuối bài
             <>
-              <div id="taboola-below-article-thumbnails"></div>
-              <script
+              <div id="taboola-below-article-thumbnails" />
+              <Script
+                id="taboola-below"
+                strategy="afterInteractive"
                 dangerouslySetInnerHTML={{
                   __html: `
                     window._taboola = window._taboola || [];
@@ -181,25 +293,38 @@ export default function Page(data: any) {
             </>
           )}
         </div>
+
+        {/* ✅ Sentinel: chạm gần đáy => bung thêm bài (đã cache sẵn) */}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+
+        {!expanded && list.length >= 2 ? (
+          <p style={{ padding: 16, opacity: 0.8 }}>
+            Kéo xuống để tự tải bài tiếp theo…
+          </p>
+        ) : null}
       </main>
     </>
   );
 }
 
+/** ===== Next.js data fetching ===== */
 export async function getStaticPaths() {
-  return {
-    paths: [],
-    fallback: "blocking",
-  };
+  return { paths: [], fallback: "blocking" };
 }
 
 export async function getStaticProps({ params }: { params: any }) {
   try {
-    const slug = params?.slug;
-    const response = await fetch(`${process.env.APP_API}/News/news-detailnew?id=${slug?.slice(slug?.lastIndexOf("-") + 1)}`).then((res) => res.json());
+    const slug = params?.slug as string | undefined;
+    const id = getIdFromSlug(slug);
 
-    const parameters = {
-      videoScriptSrc: "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
+    // ✅ API của bạn trả List<NewsMainModel> (ví dụ 2 bài)
+    const response = await fetch(
+      `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
+    ).then((res) => res.json());
+
+    const parameters: PageParameters = {
+      videoScriptSrc:
+        "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
       googleClientId: "ca-pub-2388584177550957",
       googleClientSlotId: "9127559985",
       googleAdSlot: "1932979136",
@@ -208,17 +333,20 @@ export async function getStaticProps({ params }: { params: any }) {
       mgWidgetFeedId: "1903357",
       adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
       googleTagId: "G-8R34GZG4J2",
-      // <-- set isMgid = 1 để dùng MGID, = 0 để dùng Taboola
-      isMgid: 0,
+      isMgid: 0, // 1 = MGID, 0 = Taboola
     };
 
     return {
-      props: { data: response.data, parameters },
-      revalidate: 360000,
+      props: {
+        data: (response.data || []) as NewsMainModel[],
+        parameters,
+      },
+      revalidate: 360000, // ✅ cache theo đúng ý bạn
     };
   } catch (error) {
     return {
-      props: { data: {}, parameters: {} },
+      props: { data: [] as NewsMainModel[], parameters: {} as PageParameters },
+      revalidate: 60,
     };
   }
 }
