@@ -62,7 +62,7 @@ export default function Page(props: PageProps) {
   // ✅ normalize + filter deleted
   const list: NewsMainModel[] = useMemo(() => {
     const arr = Array.isArray(props.data) ? props.data : [];
-    return arr.filter((x) => x && !x.IsDeleted);
+    return arr.filter((x) => x && !x.isDeleted);
   }, [props.data]);
  console.log("Bài đầu tiên (render):", props.data?.[0]);
  console.log("Bài đầu đ(render):", list);
