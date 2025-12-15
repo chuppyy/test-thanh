@@ -4,15 +4,15 @@ import Head from "next/head";
 
 /** ===== Types: khớp C# NewsMainModel ===== */
 export type NewsMainModel = {
-  Id: string;
-  Name: string;
-  Summary: string;
-  UserCode: string;
-  Content: string;
-  AvatarLink: string;
-  UrlRootLink: string;
-  IsDeleted: boolean;
-  DateTimeStart: string; // backend trả JSON thường là ISO string
+  id: string | null;
+  name: string;
+  summary: string;
+  userCode: string;
+  content?: string; // có thể undefined nếu API không trả
+  avatarLink?: string;
+  urlRootLink?: string;
+  isDeleted?: boolean;
+  dateTimeStart?: string; // thường là ISO string
 };
 
 export type PageParameters = {
@@ -188,7 +188,7 @@ export default function Page(props: PageProps) {
       <main>
         {/* Render bài 1, scroll thì bung thêm */}
         {visible.map((article, idx) => (
-          <section key={article.Id || idx} className="container-flu details">
+          <section key={article.id || idx} className="container-flu details">
             {idx === 0 && (
               <div
                 className="adsconex-banner"
