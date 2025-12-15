@@ -321,6 +321,7 @@ console.log("API /News/news-detailnew response:", id);
     const response = await fetch(
       `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
     ).then((res) => res.json());
+    console.log("API /News/news-detailnew response:", response);
      const jsontest = await response.json();
  console.log("API /News/news-detailnew response:", jsontest);
     const parameters: PageParameters = {
