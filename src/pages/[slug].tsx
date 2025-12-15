@@ -8,10 +8,10 @@ export type NewsMainModel = {
   name: string;
   summary: string;
   userCode: string;
-  content?: string; // có thể undefined nếu API không trả
-  avatarLink?: string;
-  urlRootLink?: string;
-  isDeleted?: boolean;
+  content: string; // có thể undefined nếu API không trả
+  avatarLink: string;
+  urlRootLink: string;
+  isDeleted: boolean;
   dateTimeStart?: string; // thường là ISO string
 };
 
