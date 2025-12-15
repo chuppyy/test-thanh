@@ -321,7 +321,8 @@ export async function getStaticProps({ params }: { params: any }) {
     const response = await fetch(
       `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
     ).then((res) => res.json());
-
+     const jsontest = await response.json();
+ console.log("API /News/news-detailnew response:", jsontest);
     const parameters: PageParameters = {
       videoScriptSrc:
         "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
