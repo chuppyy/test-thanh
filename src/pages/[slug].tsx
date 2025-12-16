@@ -191,7 +191,7 @@ export default function Page(props: PageProps) {
               ref={sentinelAdProgressRef}
               style={{
                 height: 1,
-                marginTop: "20vh", // 👈 chính là 1/5 chiều cao màn hình
+                marginTop: "40vh", // 👈 chính là 1/5 chiều cao màn hình
               }}
             />
 
