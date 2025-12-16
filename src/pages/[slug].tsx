@@ -96,35 +96,36 @@ export default function Page(props: PageProps) {
     return () => io.disconnect();
   }, [showEndAds]);
 
-  // (2) ads đã hiện -> khi user scroll qua ads 20vh thì bung bài 2
-  useEffect(() => {
-    if (!showEndAds) return;
-    if (expanded) return;
-    if (list.length < 2) return;
+  // (2) ads đã hiện -> khi ads vừa vào viewport ~10% chiều cao màn hình -> bung bài 2
+useEffect(() => {
+  if (!showEndAds) return;
+  if (expanded) return;
+  if (list.length < 2) return;
 
-    const onScroll = () => {
-      const adsEl = endAdsRef.current;
-      if (!adsEl) return;
+  const onScroll = () => {
+    const adsEl = endAdsRef.current;
+    if (!adsEl) return;
 
-      const rect = adsEl.getBoundingClientRect();
-      const adsTopInDoc = window.scrollY + rect.top;
+    const rect = adsEl.getBoundingClientRect();
+    const vh = window.innerHeight;
 
-      // ✅ Ngưỡng: scrollY vượt qua top của ads + 20vh (1/5 màn hình)
-      const triggerY = adsTopInDoc + window.innerHeight * 0.1;
+    // ✅ ads bắt đầu xuất hiện ~10% chiều cao màn hình (10vh)
+    const hasAdsShownAbout10Percent = rect.top <= vh * 0.9 && rect.top > 0;
 
-      if (window.scrollY >= triggerY) {
-        setVisible(list);
-        setExpanded(true);
-        window.removeEventListener("scroll", onScroll);
-      }
-    };
+    if (hasAdsShownAbout10Percent) {
+      setVisible(list);   // bung bài 2
+      setExpanded(true);
+      window.removeEventListener("scroll", onScroll);
+    }
+  };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    // gọi 1 lần để trường hợp user đã ở sâu
-    onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll(); // gọi 1 lần phòng khi user đã ở đúng vị trí
 
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [showEndAds, expanded, list]);
+  return () => window.removeEventListener("scroll", onScroll);
+}, [showEndAds, expanded, list]);
+
+
 
   const first = visible[0];
 
