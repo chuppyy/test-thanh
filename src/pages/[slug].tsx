@@ -154,10 +154,12 @@ export default function Page(props: PageProps) {
       {googleTagId ? (
         <>
           <Script
+          id="gg-1"
             src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
             strategy="afterInteractive"
           />
           <Script
+          id="gg-2"
             strategy="afterInteractive"
             dangerouslySetInnerHTML={{
               __html: `
