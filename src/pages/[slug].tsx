@@ -130,7 +130,7 @@ export default function Page(props: PageProps) {
         }
       },
       {
-        rootMargin: "80vh 0px 0px 0px", // ✅ ~ 1/5 màn hình qua ads thì bung
+        rootMargin: "0px 0px 80vh 0px", // ✅ ~ 1/5 màn hình qua ads thì bung
         threshold: 0,
       }
     );
