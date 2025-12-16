@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Head from "next/head";
 import Script from "next/script";
 
+/* ================== TYPES ================== */
 type NewsMainModel = {
   id: string | null;
   name: string;
@@ -18,7 +19,7 @@ type PageParameters = {
   mgWidgetFeedId?: string;
   adsKeeperSrc?: string;
   googleTagId?: string;
-  isMgid?: number | string;
+  isMgid?: number | string; // 1 = MGID, 0 = Taboola
 };
 
 type PageProps = {
@@ -26,6 +27,7 @@ type PageProps = {
   parameters: PageParameters;
 };
 
+/* ================== UTILS ================== */
 const formatDate = (str?: string) => {
   if (!str) return "";
   const d = new Date(str);
@@ -45,48 +47,59 @@ const normalize = (x: any): NewsMainModel => ({
   dateTimeStart: x?.dateTimeStart ?? x?.DateTimeStart ?? "",
 });
 
+/* ================== PAGE ================== */
 export default function Page(props: PageProps) {
-  const { mgWidgetFeedId = "", adsKeeperSrc = "", googleTagId = "", isMgid = 0 } =
-    props.parameters || {};
+  const {
+    mgWidgetFeedId = "",
+    adsKeeperSrc = "",
+    googleTagId = "",
+    isMgid = 0,
+  } = props.parameters || {};
 
   const useMgid = Number(isMgid) === 1;
 
+  // normalize data -> list
   const list = useMemo(() => {
     const raw = props.data;
     const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
   }, [props.data]);
 
+  // Visible articles: ban đầu chỉ bài 1, sau bung bài 2
   const [visible, setVisible] = useState<NewsMainModel[]>(() =>
     list.length ? [list[0]] : []
   );
 
+  // End-article-ads: ban đầu ẩn, gần hết bài 1 thì hiện
   const [showEndAds, setShowEndAds] = useState(false);
+
+  // Đã bung bài 2 chưa
   const [expanded, setExpanded] = useState(false);
 
-  // Sentinel A: gần hết bài 1 => hiện ads
+  // Sentinel A: gần hết bài 1 -> show ads
   const sentinelShowAdsRef = useRef<HTMLDivElement | null>(null);
 
-  // Sentinel B: nằm trong ads ở vị trí 20vh (1/5 màn hình) => bung bài 2
-  const sentinelAdProgressRef = useRef<HTMLDivElement | null>(null);
+  // Sentinel B: nằm SAU ads -> khi user scroll qua ads ~ 1/5 viewport -> bung bài 2
+  const sentinelAfterAdsRef = useRef<HTMLDivElement | null>(null);
 
+  // reset khi data thay đổi
   useEffect(() => {
     setVisible(list.length ? [list[0]] : []);
     setShowEndAds(false);
     setExpanded(false);
   }, [list]);
 
-  // (1) Gần hết bài 1 => show ads
+  /* ===== (1) GẦN HẾT BÀI 1 => HIỆN ADS ===== */
   useEffect(() => {
     const el = sentinelShowAdsRef.current;
-    if (!el || showEndAds) return;
+    if (!el) return;
+    if (showEndAds) return;
 
     const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) setShowEndAds(true);
+      ([entry]) => {
+        if (entry.isIntersecting) setShowEndAds(true);
       },
       {
-        // tới gần cuối content bài 1 thì bật ads
         rootMargin: "200px 0px",
         threshold: 0.01,
       }
@@ -96,25 +109,29 @@ export default function Page(props: PageProps) {
     return () => io.disconnect();
   }, [showEndAds]);
 
-  // (2) Ads đã hiện + user scroll qua ~20vh trong ads => bung bài 2
+  /* ===== (2) ADS ĐÃ HIỆN THẬT => SCROLL QUA ~1/5 MÀN HÌNH => BUNG BÀI 2 =====
+     Mấu chốt:
+     - Sentinel đặt SAU ads để đảm bảo ads đã vào viewport
+     - rootMargin "80vh" => khi còn cách sentinel ~80% chiều cao màn hình, coi như user đã scroll qua ~20% viewport
+       (≈ 1/5 màn hình) trong khu vực ads.
+  */
   useEffect(() => {
-    const el = sentinelAdProgressRef.current;
+    const el = sentinelAfterAdsRef.current;
     if (!el) return;
     if (!showEndAds) return;
     if (expanded) return;
     if (list.length < 2) return;
 
     const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisible(list);
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(list); // bung bài 2 (và các bài trong list nếu có)
           setExpanded(true);
         }
       },
       {
-        // không preload sớm, đúng “qua 1/5 màn hình”
-        rootMargin: "0px 0px",
-        threshold: 0.01,
+        rootMargin: "80vh 0px 0px 0px", // ✅ ~ 1/5 màn hình qua ads thì bung
+        threshold: 0,
       }
     );
 
@@ -129,10 +146,13 @@ export default function Page(props: PageProps) {
       <Head>
         <title>{first ? `${first.name}-${first.userCode}` : "News"}</title>
         {first?.avatarLink ? <meta property="og:image" content={first.avatarLink} /> : null}
+        {first ? <meta property="og:title" content={`${first.name}-${first.userCode}`} /> : null}
       </Head>
 
+      {/* AdsKeeper */}
       {adsKeeperSrc ? <Script src={adsKeeperSrc} strategy="afterInteractive" /> : null}
 
+      {/* Google Analytics */}
       {googleTagId ? (
         <>
           <Script
@@ -156,7 +176,7 @@ export default function Page(props: PageProps) {
       ) : null}
 
       <main>
-        {/* ====== NỘI DUNG (bài 1, rồi bài 2 bung ra) ====== */}
+        {/* =================== NỘI DUNG (bài 1 -> sau đó bài 2) =================== */}
         {visible.map((article, idx) => (
           <section
             key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
@@ -167,7 +187,10 @@ export default function Page(props: PageProps) {
             )}
 
             <h1>{article.name}</h1>
-            <p className="mb-4 text-lg">Posted: {formatDate(article.dateTimeStart)}</p>
+
+            <p className="mb-4 text-lg">
+              Posted: {formatDate(article.dateTimeStart)}
+            </p>
 
             <Suspense fallback={<p>Loading...</p>}>
               <article
@@ -180,21 +203,12 @@ export default function Page(props: PageProps) {
           </section>
         ))}
 
-        {/* Sentinel A: gần hết bài 1 -> hiện ads */}
+        {/* Sentinel A: gần hết bài 1 => show end-article-ads */}
         <div ref={sentinelShowAdsRef} style={{ height: 1 }} />
 
-        {/* ====== END ARTICLE ADS HIỆN TRƯỚC ====== */}
+        {/* =================== END-ARTICLE-ADS (PHẢI HIỂN THỊ THẬT) =================== */}
         {showEndAds && (
-          <div className="end-article-ads" style={{ position: "relative" }}>
-            {/* ✅ Trigger nằm cách top ads đúng 20vh (1/5 màn hình) */}
-            <div
-              ref={sentinelAdProgressRef}
-              style={{
-                height: 1,
-                marginTop: "40vh", // 👈 chính là 1/5 chiều cao màn hình
-              }}
-            />
-
+          <div className="end-article-ads">
             {useMgid ? (
               <>
                 {mgWidgetFeedId ? <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} /> : null}
@@ -232,6 +246,9 @@ export default function Page(props: PageProps) {
             )}
           </div>
         )}
+
+        {/* Sentinel B: đặt SAU ads -> khi user scroll qua ads ~ 1/5 màn hình thì bung bài 2 */}
+        <div ref={sentinelAfterAdsRef} style={{ height: 1 }} />
       </main>
     </>
   );
@@ -247,7 +264,7 @@ export async function getStaticProps({ params }: { params: any }) {
   const id = slug ? slug.slice(slug.lastIndexOf("-") + 1) : "";
 
   const res = await fetch(
-    `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
+    `${process.env.APP_API}/News/news-detailnew?id=${encodeURIComponent(id)}`
   );
   const json = await res.json();
 
@@ -258,7 +275,7 @@ export async function getStaticProps({ params }: { params: any }) {
         mgWidgetFeedId: "1903357",
         adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
         googleTagId: "G-8R34GZG4J2",
-        isMgid: 0,
+        isMgid: 0, // 1 = MGID, 0 = Taboola
       },
     },
     revalidate: 360000,
