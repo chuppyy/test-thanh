@@ -110,7 +110,7 @@ useEffect(() => {
     const vh = window.innerHeight;
 
     // ✅ ads bắt đầu xuất hiện ~10% chiều cao màn hình (10vh)
-    const hasAdsShownAbout10Percent = rect.top <= vh * 0.7 && rect.top > 0;
+    const hasAdsShownAbout10Percent = rect.top <= vh * 0.6 && rect.top > 0;
 
     if (hasAdsShownAbout10Percent) {
       setVisible(list);   // bung bài 2
