@@ -173,7 +173,7 @@ export default function Page(props: PageProps) {
 
       <main>
         {/* =================== NỘI DUNG (ban đầu chỉ bài 1, sau đó bung bài 2) =================== */}
-        {visible.map((article, idx) => (
+        {visible.map((article:NewsMainModel, idx: number) => (
           <section
             key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
             className="container-flu details"
