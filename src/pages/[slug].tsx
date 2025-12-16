@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Head from "next/head";
 import Script from "next/script";
 
-/* ================== TYPES ================== */
 type NewsMainModel = {
   id: string | null;
   name: string;
@@ -16,8 +15,6 @@ type NewsMainModel = {
 };
 
 type PageParameters = {
-  mgWidgetId1?: string;
-  mgWidgetId2?: string;
   mgWidgetFeedId?: string;
   adsKeeperSrc?: string;
   googleTagId?: string;
@@ -29,7 +26,6 @@ type PageProps = {
   parameters: PageParameters;
 };
 
-/* ================== UTILS ================== */
 const formatDate = (str?: string) => {
   if (!str) return "";
   const d = new Date(str);
@@ -49,15 +45,9 @@ const normalize = (x: any): NewsMainModel => ({
   dateTimeStart: x?.dateTimeStart ?? x?.DateTimeStart ?? "",
 });
 
-/* ================== PAGE ================== */
 export default function Page(props: PageProps) {
-  const {
-    mgWidgetId2 = "",
-    mgWidgetFeedId = "",
-    adsKeeperSrc = "",
-    googleTagId = "",
-    isMgid = 0,
-  } = props.parameters || {};
+  const { mgWidgetFeedId = "", adsKeeperSrc = "", googleTagId = "", isMgid = 0 } =
+    props.parameters || {};
 
   const useMgid = Number(isMgid) === 1;
 
@@ -67,44 +57,36 @@ export default function Page(props: PageProps) {
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
   }, [props.data]);
 
-  // ✅ chỉ show bài 1 trước
   const [visible, setVisible] = useState<NewsMainModel[]>(() =>
     list.length ? [list[0]] : []
   );
 
-  // ✅ ads cuối bài: ban đầu ẩn, tới gần cuối bài 1 thì bật
   const [showEndAds, setShowEndAds] = useState(false);
-
-  // ✅ đã bung bài 2 chưa
   const [expanded, setExpanded] = useState(false);
 
-  // Sentinel 1: tới gần cuối bài 1 -> bật showEndAds
+  // Sentinel A: gần hết bài 1 => hiện ads
   const sentinelShowAdsRef = useRef<HTMLDivElement | null>(null);
 
-  // Sentinel 2: kéo qua ads 1 xíu -> bung bài 2
-  const sentinelLoadNextRef = useRef<HTMLDivElement | null>(null);
+  // Sentinel B: nằm trong ads ở vị trí 20vh (1/5 màn hình) => bung bài 2
+  const sentinelAdProgressRef = useRef<HTMLDivElement | null>(null);
 
-  // reset khi đổi bài/props
   useEffect(() => {
     setVisible(list.length ? [list[0]] : []);
     setShowEndAds(false);
     setExpanded(false);
   }, [list]);
 
-  // ✅ 1) Gần hết bài 1 -> showEndAds = true
+  // (1) Gần hết bài 1 => show ads
   useEffect(() => {
     const el = sentinelShowAdsRef.current;
-    if (!el) return;
-    if (showEndAds) return;
+    if (!el || showEndAds) return;
 
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setShowEndAds(true);
-        }
+        if (entries[0]?.isIntersecting) setShowEndAds(true);
       },
       {
-        // đến gần cuối nội dung bài 1 thì bật ads
+        // tới gần cuối content bài 1 thì bật ads
         rootMargin: "200px 0px",
         threshold: 0.01,
       }
@@ -114,9 +96,9 @@ export default function Page(props: PageProps) {
     return () => io.disconnect();
   }, [showEndAds]);
 
-  // ✅ 2) Sau khi ads đã hiện -> kéo qua ads 1 xíu -> bung bài 2
+  // (2) Ads đã hiện + user scroll qua ~20vh trong ads => bung bài 2
   useEffect(() => {
-    const el = sentinelLoadNextRef.current;
+    const el = sentinelAdProgressRef.current;
     if (!el) return;
     if (!showEndAds) return;
     if (expanded) return;
@@ -125,13 +107,13 @@ export default function Page(props: PageProps) {
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisible(list); // bung bài 2
+          setVisible(list);
           setExpanded(true);
         }
       },
       {
-        // “qua ads một đoạn” mới bung (tăng/giảm để chỉnh cảm giác)
-        rootMargin: "100px 0px",
+        // không preload sớm, đúng “qua 1/5 màn hình”
+        rootMargin: "0px 0px",
         threshold: 0.01,
       }
     );
@@ -154,12 +136,12 @@ export default function Page(props: PageProps) {
       {googleTagId ? (
         <>
           <Script
-          id="gg-1"
+            id="ga-lib"
             src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
             strategy="afterInteractive"
           />
           <Script
-          id="gg-2"
+            id="ga-config"
             strategy="afterInteractive"
             dangerouslySetInnerHTML={{
               __html: `
@@ -174,8 +156,8 @@ export default function Page(props: PageProps) {
       ) : null}
 
       <main>
-        {/* =================== NỘI DUNG (ban đầu chỉ bài 1, sau đó bung bài 2) =================== */}
-        {visible.map((article:NewsMainModel, idx: number) => (
+        {/* ====== NỘI DUNG (bài 1, rồi bài 2 bung ra) ====== */}
+        {visible.map((article, idx) => (
           <section
             key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
             className="container-flu details"
@@ -198,12 +180,21 @@ export default function Page(props: PageProps) {
           </section>
         ))}
 
-        {/* ✅ Sentinel 1: gần hết bài 1 -> bật end-article-ads */}
+        {/* Sentinel A: gần hết bài 1 -> hiện ads */}
         <div ref={sentinelShowAdsRef} style={{ height: 1 }} />
 
-        {/* =================== END-ARTICLE-ADS HIỆN TRƯỚC =================== */}
+        {/* ====== END ARTICLE ADS HIỆN TRƯỚC ====== */}
         {showEndAds && (
-          <div className="end-article-ads">
+          <div className="end-article-ads" style={{ position: "relative" }}>
+            {/* ✅ Trigger nằm cách top ads đúng 20vh (1/5 màn hình) */}
+            <div
+              ref={sentinelAdProgressRef}
+              style={{
+                height: 1,
+                marginTop: "20vh", // 👈 chính là 1/5 chiều cao màn hình
+              }}
+            />
+
             {useMgid ? (
               <>
                 {mgWidgetFeedId ? <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} /> : null}
@@ -222,7 +213,7 @@ export default function Page(props: PageProps) {
               <>
                 <div id="taboola-below-article-thumbnails" />
                 <Script
-                  id="taboola-below"
+                  id="taboola-below-flush"
                   strategy="afterInteractive"
                   dangerouslySetInnerHTML={{
                     __html: `
@@ -241,9 +232,6 @@ export default function Page(props: PageProps) {
             )}
           </div>
         )}
-
-        {/* ✅ Sentinel 2: kéo qua ads một xíu -> bung bài 2 */}
-        <div ref={sentinelLoadNextRef} style={{ height: 1 }} />
       </main>
     </>
   );
@@ -267,7 +255,6 @@ export async function getStaticProps({ params }: { params: any }) {
     props: {
       data: json?.data ?? [],
       parameters: {
-        mgWidgetId2: "1903360",
         mgWidgetFeedId: "1903357",
         adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
         googleTagId: "G-8R34GZG4J2",
