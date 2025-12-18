@@ -373,7 +373,7 @@ export async function getStaticProps({ params }: { params: any }) {
   const id = getIdFromSlug(slug);
 
   const res = await fetch(
-    `${process.env.APP_API}/News/news-detailnew?id=${encodeURIComponent(id)}`
+    `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
   );
   const json = await res.json();
 
