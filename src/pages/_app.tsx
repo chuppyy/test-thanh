@@ -29,7 +29,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
     }(
       document.createElement('script'),
       document.getElementsByTagName('script')[0],
-      '//cdn.taboola.com/libtrc/metaconex-robertusfejiio/loader.js',
+      '//cdn.taboola.com/libtrc/metaconex-topnewsusfejiio/loader.js',
       'tb_loader_script'
     );
 
@@ -43,7 +43,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
 
   {/* <!-- Metaconex tag (gtag.js) --> */}
 <Script defer src="https://adsconex.com/js/config.js" data-config="all" strategy="beforeInteractive"></Script>
-<meta name="verification" content="CNSbeIm5QR"></meta>
+<meta name="verification" content="OQhbutYIbK"></meta>
 
 {/* --- Mã FEJI (HEAD) --- */}
         {/* VIDEO PLAYER FEJI: Mã Player Script chính */}
