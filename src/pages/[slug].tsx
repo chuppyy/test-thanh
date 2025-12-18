@@ -141,7 +141,7 @@ export default function Page(props: PageProps) {
       const rect = adsEl.getBoundingClientRect();
       const vh = window.innerHeight;
 
-      const adsShownAbout10Percent = rect.top <= vh * 0.9 && rect.top > 0;
+      const adsShownAbout10Percent = rect.top <= vh * 0.65 && rect.top > 0;
 
       if (adsShownAbout10Percent) {
         setVisible(list); // bung bài 2
@@ -226,7 +226,7 @@ export default function Page(props: PageProps) {
               <div className="adsconex-banner" data-ad-placement="banner1" id="ub-banner1" />
             )}
             {idx === 1 && (
-              <div className="adsconex-banner" data-ad-placement="banner2" id="ub-banner2" />
+              <div className="adsconex-banner" data-ad-placement="banner10" id="ub-banner10" />
             )}
 
             <h1>{article.name}</h1>
@@ -382,7 +382,7 @@ export async function getStaticProps({ params }: { params: any }) {
     mgWidgetId1: "1903360",
     mgWidgetFeedId: "1903357",
     adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
-    googleTagId: "G-8R34GZG4J2",
+    googleTagId: "G-RZ218Z0QZ1",
     isMgid: 0,
     fejiHbZone: "feji.io_long",
     fejiPlayerId: "feji.io_1723454353847",
