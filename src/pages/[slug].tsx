@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+<<<<<<< HEAD
 
 import Script from "next/script";
 import Head from "next/head";
+=======
+import Script from "next/script";
+import Head from "next/head";
+
+>>>>>>> 125b6bf54938ffd92d3c5b576b80de530c5440bc
 
 /* ================== TYPES ================== */
 type NewsMainModel = {
