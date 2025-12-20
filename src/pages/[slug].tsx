@@ -19,11 +19,6 @@ type PageParameters = {
   isMgid: number;
 };
 
-type PageProps = {
-  data: NewsMainModel[] | NewsMainModel;
-  parameters: PageParameters;
-};
-
 /* ================== HELPERS ================== */
 const normalize = (x: any): NewsMainModel => ({
   id: x?.id ?? x?.Id ?? null,
@@ -40,60 +35,83 @@ const getIdFromSlug = (slug?: string) => {
 };
 
 /* ================== MAIN PAGE ================== */
-export default function Page({ data, parameters }: PageProps) {
+export default function Page({ data, parameters }: { data: any; parameters: PageParameters }) {
   const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
   const useMgid = Number(isMgid) === 1;
 
-  // Xử lý danh sách bài viết
   const list = useMemo(() => {
     const arr = Array.isArray(data) ? data : data ? [data] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
   }, [data]);
 
   const [visibleCount, setVisibleCount] = useState(1);
+  const midInjected = useRef(false);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const isExpanded = useRef(false);
 
-  // LOGIC QUAN TRỌNG: Bung bài khi quảng cáo hiện 30% màn hình
+  // 1. XỬ LÝ CHÈN QUẢNG CÁO VÀO ID CÓ SẴN TRONG CONTENT (Dùng MutationObserver)
+  useEffect(() => {
+    if (midInjected.current) return;
+
+    const injectMidAd = () => {
+      const target = document.getElementById("qctaboo-mid");
+      if (target && !midInjected.current) {
+        const newDiv = document.createElement("div");
+        newDiv.className = "injected-mid-ad";
+        if (useMgid) {
+          newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
+        } else {
+          newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
+        }
+        target.appendChild(newDiv);
+        midInjected.current = true;
+        
+        // Kích hoạt script quét quảng cáo
+        if (typeof window !== "undefined") {
+           const cmd = useMgid 
+            ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+            : `window._taboola = window._taboola || []; _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`;
+           const s = document.createElement("script");
+           s.innerHTML = cmd;
+           document.body.appendChild(s);
+        }
+        return true;
+      }
+      return false;
+    };
+
+    // Kiểm tra ngay lập tức
+    if (injectMidAd()) return;
+
+    // Nếu chưa thấy, quan sát sự thay đổi của DOM
+    const observer = new MutationObserver(() => {
+      if (injectMidAd()) observer.disconnect();
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [useMgid, mgWidgetId1]);
+
+  // 2. LOGIC BUNG BÀI: Khi khu vực quảng cáo chạm mốc 30% chiều cao màn hình
   useEffect(() => {
     if (list.length < 2) return;
 
-    const handleScroll = () => {
-      if (isExpanded.current || !triggerRef.current) return;
+    const onScroll = () => {
+      if (visibleCount >= list.length || !triggerRef.current) return;
 
       const rect = triggerRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
+      const vh = window.innerHeight;
 
-      // Kích hoạt khi "đỉnh" của khối quảng cáo cách đỉnh màn hình 70% chiều cao 
-      // (Tương đương việc nó đã hiện lên được 30% từ dưới lên)
-      if (rect.top <= viewportHeight * 0.7) {
+      // rect.top là vị trí của đỉnh khối quảng cáo so với mép trên màn hình.
+      // Khi rect.top <= vh * 0.7, có nghĩa là khối đó đã trồi lên khỏi đáy màn hình được 30% chiều cao màn hình.
+      if (rect.top <= vh * 0.7) {
         setVisibleCount(list.length);
-        isExpanded.current = true;
-        window.removeEventListener("scroll", handleScroll);
+        window.removeEventListener("scroll", onScroll);
       }
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    // Kiểm tra ngay lập tức nếu bài 1 quá ngắn
-    handleScroll();
-
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [list.length]);
-
-  // Xử lý nội dung bài viết để chèn quảng cáo vào đúng ID qctaboo-mid
-  const renderContentWithAds = (content: string) => {
-    if (!content) return "";
-    
-    // Nếu là MGID
-    if (useMgid) {
-      const mgidHtml = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
-      return content.replace('id="qctaboo-mid"', `id="qctaboo-mid">${mgidHtml}`);
-    } 
-    
-    // Nếu là Taboola
-    const taboolaHtml = `<div id="taboola-below-mid-article"></div>`;
-    return content.replace('id="qctaboo-mid"', `id="qctaboo-mid">${taboolaHtml}`);
-  };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [visibleCount, list.length]);
 
   return (
     <>
@@ -101,72 +119,71 @@ export default function Page({ data, parameters }: PageProps) {
         <title>{list[0]?.name || "News"}</title>
       </Head>
 
-      {/* Nạp script quảng cáo và GA */}
       {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
       {googleTagId && (
-        <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
+        <>
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
+          <Script id="ga-config" strategy="afterInteractive">
+            {`window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date()); gtag('config', '${googleTagId}');`}
+          </Script>
+        </>
       )}
 
       <main>
         {list.slice(0, visibleCount).map((article, idx) => (
-          <div key={article.id || idx} className="article-wrapper">
-            <section className="container-flu details">
+          <div key={article.id || idx}>
+            <section className="container-flu details" style={{ paddingBottom: '10px' }}>
               <h1>{article.name}</h1>
               <article 
                 className="content" 
-                dangerouslySetInnerHTML={{ __html: renderContentWithAds(article.content || "") }} 
+                dangerouslySetInnerHTML={{ __html: article.content || "" }} 
               />
             </section>
 
-            {/* QUẢNG CÁO GIỮA BÀI 1 VÀ BÀI 2 (TRIGGER) */}
+            {/* KHỐI QUẢNG CÁO CUỐI BÀI 1 & VÙNG TRIGGER */}
             {idx === 0 && (
               <div 
-                ref={triggerRef} 
-                className="ads-trigger-container"
+                ref={triggerRef}
+                className="end-ads-container"
                 style={{ 
-                  minHeight: "300px", 
-                  margin: "40px 0",
-                  background: "#fcfcfc",
-                  borderTop: "1px solid #eee"
+                  minHeight: '40vh', // Cố định chiều cao vùng này để tính toán 30% luôn chuẩn
+                  margin: '30px 0',
+                  background: '#fafafa' // Màu nền nhẹ để bạn dễ kiểm tra vùng kích hoạt
                 }}
               >
-                {/* Khối quảng cáo Feed/Thumbnails */}
+                {/* Phần quảng cáo thực tế */}
                 {useMgid ? (
                   <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
                 ) : (
                   <div id="taboola-below-article-thumbnails" />
                 )}
                 
-                {/* Script kích hoạt cho cả Mid và End Ads */}
-                <Script id={`ads-init-${idx}`} strategy="afterInteractive">
+                <Script id="end-ads-init" strategy="afterInteractive">
                   {useMgid 
                     ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
                     : `window._taboola = window._taboola || [];
-                       _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });
                        _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
                        _taboola.push({ flush: true });`}
                 </Script>
               </div>
             )}
-            
-            {idx > 0 && <hr style={{ margin: "50px 0" }} />}
+            {idx > 0 && <hr style={{ margin: '40px 0', borderTop: '1px solid #eee' }} />}
           </div>
         ))}
       </main>
 
       <style jsx global>{`
-        .content iframe { width: 100% !important; height: auto; min-height: 300px; }
-        #qctaboo-mid { margin: 20px 0; min-height: 50px; }
+        .content { font-size: 18px; line-height: 1.6; }
+        .content iframe { width: 100% !important; min-height: 300px; }
+        #qctaboo-mid { min-height: 250px; margin: 20px 0; clear: both; }
       `}</style>
     </>
   );
 }
 
 /* ================== SERVER SIDE ================== */
-export async function getStaticPaths() {
-  return { paths: [], fallback: "blocking" };
-}
-
+export async function getStaticPaths() { return { paths: [], fallback: "blocking" }; }
 export async function getStaticProps({ params }: any) {
   try {
     const id = getIdFromSlug(params?.slug);
