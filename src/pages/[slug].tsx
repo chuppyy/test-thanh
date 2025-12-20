@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense, memo } from "react";
 import Script from "next/script";
 import Head from "next/head";
 
@@ -6,9 +6,13 @@ import Head from "next/head";
 type NewsMainModel = {
   id: string | null;
   name: string;
+  summary?: string;
   userCode: string;
   content?: string;
+  avatarLink?: string;
+  urlRootLink?: string;
   isDeleted?: boolean;
+  dateTimeStart?: string;
 };
 
 type PageParameters = {
@@ -19,13 +23,31 @@ type PageParameters = {
   isMgid: number;
 };
 
+type PageProps = {
+  data: NewsMainModel[] | NewsMainModel;
+  parameters: PageParameters;
+};
+
+const FEJI_HB_ZONE = "feji.io_long";
+const FEJI_PLAYER_ID = "feji.io_1723454353847";
+
 /* ================== HELPERS ================== */
+const formatDate = (str?: string) => {
+  if (!str) return "";
+  const d = new Date(str);
+  return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+
 const normalize = (x: any): NewsMainModel => ({
   id: x?.id ?? x?.Id ?? null,
   name: x?.name ?? x?.Name ?? "",
+  summary: x?.summary ?? x?.Summary ?? "",
   userCode: x?.userCode ?? x?.UserCode ?? "",
   content: x?.content ?? x?.Content ?? "",
+  avatarLink: x?.avatarLink ?? x?.AvatarLink ?? "",
+  urlRootLink: x?.urlRootLink ?? x?.UrlRootLink ?? "",
   isDeleted: x?.isDeleted ?? x?.IsDeleted ?? false,
+  dateTimeStart: x?.dateTimeStart ?? x?.DateTimeStart ?? "",
 });
 
 const getIdFromSlug = (slug?: string) => {
@@ -34,8 +56,44 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
+/* ================== SUB-COMPONENTS ================== */
+const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; idx: number; isFirst: boolean }) => (
+  <section className="container-flu details">
+    <div 
+      className="adsconex-banner" 
+      data-ad-placement={idx === 0 ? "banner1" : "banner10"} 
+      id={idx === 0 ? "ub-banner1" : "ub-banner10"} 
+    />
+
+    <h1>{article.name}</h1>
+
+    {isFirst && (
+      <div id={`div-ub-${FEJI_PLAYER_ID}`} style={{ margin: '15px 0' }}>
+        <Script id="feji-hb-init" strategy="afterInteractive">
+          {`window.unibotshb = window.unibotshb || { cmd: [] };
+            window.unibotshb.cmd.push(function () { ubHB("${FEJI_HB_ZONE}"); });`}
+        </Script>
+        <Script id="feji-player-init" strategy="afterInteractive">
+          {`window.unibots = window.unibots || { cmd: [] };
+            window.unibots.cmd.push(function () { unibotsPlayer("${FEJI_PLAYER_ID}"); });`}
+        </Script>
+      </div>
+    )}
+
+    <p className="mb-4 text-sm" style={{ color: '#888' }}>
+      Posted: {formatDate(article.dateTimeStart)}
+    </p>
+
+    <Suspense fallback={<p>Loading...</p>}>
+      <article className="content" dangerouslySetInnerHTML={{ __html: article.content || "" }} />
+    </Suspense>
+  </section>
+));
+
+ArticleItem.displayName = "ArticleItem";
+
 /* ================== MAIN PAGE ================== */
-export default function Page({ data, parameters }: { data: any; parameters: PageParameters }) {
+export default function Page({ data, parameters }: PageProps) {
   const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
   const useMgid = Number(isMgid) === 1;
 
@@ -45,65 +103,42 @@ export default function Page({ data, parameters }: { data: any; parameters: Page
   }, [data]);
 
   const [visibleCount, setVisibleCount] = useState(1);
-  const midInjected = useRef(false);
+  const [showEndAds, setShowEndAds] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
 
-  // 1. XỬ LÝ CHÈN QUẢNG CÁO VÀO ID CÓ SẴN TRONG CONTENT (Dùng MutationObserver)
+  // 1. Kích hoạt hiện khung Ads sớm hơn (khi cách đáy màn hình 600px)
   useEffect(() => {
-    if (midInjected.current) return;
-
-    const injectMidAd = () => {
-      const target = document.getElementById("qctaboo-mid");
-      if (target && !midInjected.current) {
-        const newDiv = document.createElement("div");
-        newDiv.className = "injected-mid-ad";
-        if (useMgid) {
-          newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
-        } else {
-          newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShowEndAds(true);
+          io.disconnect();
         }
-        target.appendChild(newDiv);
-        midInjected.current = true;
-        
-        // Kích hoạt script quét quảng cáo
-        if (typeof window !== "undefined") {
-           const cmd = useMgid 
-            ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
-            : `window._taboola = window._taboola || []; _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`;
-           const s = document.createElement("script");
-           s.innerHTML = cmd;
-           document.body.appendChild(s);
-        }
-        return true;
-      }
-      return false;
-    };
+      },
+      { rootMargin: "600px 0px" } 
+    );
 
-    // Kiểm tra ngay lập tức
-    if (injectMidAd()) return;
+    const sentinel = document.getElementById("ad-sentinel");
+    if (sentinel) io.observe(sentinel);
+    return () => io.disconnect();
+  }, []);
 
-    // Nếu chưa thấy, quan sát sự thay đổi của DOM
-    const observer = new MutationObserver(() => {
-      if (injectMidAd()) observer.disconnect();
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [useMgid, mgWidgetId1]);
-
-  // 2. LOGIC BUNG BÀI: Khi khu vực quảng cáo chạm mốc 30% chiều cao màn hình
+  // 2. LOGIC QUAN TRỌNG: Bung bài 2 khi quảng cáo hiện 30% màn hình
   useEffect(() => {
-    if (list.length < 2) return;
+    if (!showEndAds || visibleCount >= list.length) return;
 
     const onScroll = () => {
-      if (visibleCount >= list.length || !triggerRef.current) return;
+      const el = triggerRef.current;
+      if (!el) return;
 
-      const rect = triggerRef.current.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       const vh = window.innerHeight;
+      
+      // Tính toán: Khi đỉnh của khung quảng cáo đã đi lên được 30% chiều cao màn hình tính từ đáy
+      // Nghĩa là: khoảng cách từ đỉnh màn hình tới element <= 70% chiều cao màn hình
+      const isReached30Percent = rect.top <= vh * 0.7;
 
-      // rect.top là vị trí của đỉnh khối quảng cáo so với mép trên màn hình.
-      // Khi rect.top <= vh * 0.7, có nghĩa là khối đó đã trồi lên khỏi đáy màn hình được 30% chiều cao màn hình.
-      if (rect.top <= vh * 0.7) {
+      if (isReached30Percent) {
         setVisibleCount(list.length);
         window.removeEventListener("scroll", onScroll);
       }
@@ -111,12 +146,29 @@ export default function Page({ data, parameters }: { data: any; parameters: Page
 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [visibleCount, list.length]);
+  }, [showEndAds, list.length, visibleCount]);
+
+  // 3. Iframe Resize
+  useEffect(() => {
+    document.querySelectorAll("iframe").forEach((iframe) => {
+      if (!iframe.src) return;
+      const isMobile = window.innerWidth <= 525;
+      iframe.style.width = "100%";
+      if (iframe.src.includes("twitter")) {
+        iframe.style.height = isMobile ? "650px" : "827px";
+        if (!isMobile) iframe.style.width = "550px";
+      } else {
+        iframe.style.height = isMobile ? "250px" : "300px";
+      }
+    });
+  }, [visibleCount]);
+
+  const first = list[0];
 
   return (
     <>
       <Head>
-        <title>{list[0]?.name || "News"}</title>
+        <title>{first ? `${first.name} - ${first.userCode}` : "News"}</title>
       </Head>
 
       {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
@@ -124,8 +176,10 @@ export default function Page({ data, parameters }: { data: any; parameters: Page
         <>
           <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
           <Script id="ga-config" strategy="afterInteractive">
-            {`window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date()); gtag('config', '${googleTagId}');`}
+            {`window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${googleTagId}');`}
           </Script>
         </>
       )}
@@ -133,57 +187,73 @@ export default function Page({ data, parameters }: { data: any; parameters: Page
       <main>
         {list.slice(0, visibleCount).map((article, idx) => (
           <div key={article.id || idx}>
-            <section className="container-flu details" style={{ paddingBottom: '10px' }}>
-              <h1>{article.name}</h1>
-              <article 
-                className="content" 
-                dangerouslySetInnerHTML={{ __html: article.content || "" }} 
-              />
-            </section>
-
-            {/* KHỐI QUẢNG CÁO CUỐI BÀI 1 & VÙNG TRIGGER */}
+            <ArticleItem article={article} idx={idx} isFirst={idx === 0} />
             {idx === 0 && (
-              <div 
-                ref={triggerRef}
-                className="end-ads-container"
-                style={{ 
-                  minHeight: '40vh', // Cố định chiều cao vùng này để tính toán 30% luôn chuẩn
-                  margin: '30px 0',
-                  background: '#fafafa' // Màu nền nhẹ để bạn dễ kiểm tra vùng kích hoạt
-                }}
-              >
-                {/* Phần quảng cáo thực tế */}
-                {useMgid ? (
-                  <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
-                ) : (
-                  <div id="taboola-below-article-thumbnails" />
-                )}
-                
-                <Script id="end-ads-init" strategy="afterInteractive">
-                  {useMgid 
-                    ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
-                    : `window._taboola = window._taboola || [];
-                       _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
-                       _taboola.push({ flush: true });`}
-                </Script>
-              </div>
+              <>
+                {/* MID ADS */}
+                <div id="qctaboo-mid" className="my-10">
+                  {useMgid ? (
+                    <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
+                  ) : (
+                    <div id="taboola-below-mid-article"></div>
+                  )}
+                  
+                </div>
+                <Script id="mid-load" strategy="afterInteractive">
+                    {useMgid 
+                      ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+                      : `window._taboola = window._taboola || [];
+                         _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`}
+                  </Script>
+                {/* Điểm kích hoạt hiện Ads */}
+                <div id="ad-sentinel" style={{ height: "1px" }} />
+              </>
             )}
-            {idx > 0 && <hr style={{ margin: '40px 0', borderTop: '1px solid #eee' }} />}
+            {idx < visibleCount - 1 && <hr style={{ margin: "50px 0", border: '0', borderTop: '2px dashed #eee' }} />}
           </div>
         ))}
-      </main>
 
-      <style jsx global>{`
-        .content { font-size: 18px; line-height: 1.6; }
-        .content iframe { width: 100% !important; min-height: 300px; }
-        #qctaboo-mid { min-height: 250px; margin: 20px 0; clear: both; }
-      `}</style>
+        {/* VÙNG QUẢNG CÁO CUỐI BÀI 1 */}
+        <div 
+          ref={triggerRef} 
+          style={{ 
+            minHeight: showEndAds ? '350px' : '0px', 
+            visibility: showEndAds ? 'visible' : 'hidden',
+            marginTop: '20px'
+          }}
+        >
+          {showEndAds && (
+            <>
+              {useMgid ? (
+                <>
+                  <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId}></div>
+                  <Script id="mgid-f-load" strategy="afterInteractive">
+                    {`(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`}
+                  </Script>
+                </>
+              ) : (
+                <>
+                  <div id="taboola-below-article-thumbnails"></div>
+                  <Script id="taboola-f-load" strategy="afterInteractive">
+                    {`window._taboola = window._taboola || [];
+                      _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
+                      _taboola.push({ flush: true });`}
+                  </Script>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </main>
     </>
   );
 }
 
-/* ================== SERVER SIDE ================== */
-export async function getStaticPaths() { return { paths: [], fallback: "blocking" }; }
+/* ================== NEXT DATA ================== */
+export async function getStaticPaths() {
+  return { paths: [], fallback: "blocking" };
+}
+
 export async function getStaticProps({ params }: any) {
   try {
     const id = getIdFromSlug(params?.slug);
