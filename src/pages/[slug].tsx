@@ -28,16 +28,7 @@ type PageProps = {
   parameters: PageParameters;
 };
 
-const FEJI_HB_ZONE = "feji.io_long";
-const FEJI_PLAYER_ID = "feji.io_1723454353847";
-
 /* ================== HELPERS ================== */
-const formatDate = (str?: string) => {
-  if (!str) return "";
-  const d = new Date(str);
-  return Number.isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-};
-
 const normalize = (x: any): NewsMainModel => ({
   id: x?.id ?? x?.Id ?? null,
   name: x?.name ?? x?.Name ?? "",
@@ -56,35 +47,19 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
-/* ================== SUB-COMPONENTS ================== */
-const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; idx: number; isFirst: boolean }) => (
+/* ================== SUB-COMPONENT ================== */
+const ArticleItem = memo(({ article, idx }: { article: NewsMainModel; idx: number }) => (
   <section className="container-flu details">
+    {/* Banner mặc định */}
     <div 
       className="adsconex-banner" 
       data-ad-placement={idx === 0 ? "banner1" : "banner10"} 
       id={idx === 0 ? "ub-banner1" : "ub-banner10"} 
     />
-
     <h1>{article.name}</h1>
-
-    {isFirst && (
-      <div id={`div-ub-${FEJI_PLAYER_ID}`} style={{ margin: '15px 0' }}>
-        <Script id="feji-hb-init" strategy="afterInteractive">
-          {`window.unibotshb = window.unibotshb || { cmd: [] };
-            window.unibotshb.cmd.push(function () { ubHB("${FEJI_HB_ZONE}"); });`}
-        </Script>
-        <Script id="feji-player-init" strategy="afterInteractive">
-          {`window.unibots = window.unibots || { cmd: [] };
-            window.unibots.cmd.push(function () { unibotsPlayer("${FEJI_PLAYER_ID}"); });`}
-        </Script>
-      </div>
-    )}
-
-    <p className="mb-4 text-sm" style={{ color: '#888' }}>
-      Posted: {formatDate(article.dateTimeStart)}
-    </p>
-
+    
     <Suspense fallback={<p>Loading...</p>}>
+      {/* Nội dung bài viết - Nơi chứa thẻ <div id="qctaboo-mid"> sẵn có */}
       <article className="content" dangerouslySetInnerHTML={{ __html: article.content || "" }} />
     </Suspense>
   </section>
@@ -93,167 +68,137 @@ const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; i
 ArticleItem.displayName = "ArticleItem";
 
 /* ================== MAIN PAGE ================== */
-export default function Page({ data, parameters }: PageProps) {
-  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
+export default function Page(props: PageProps) {
+  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = props.parameters;
   const useMgid = Number(isMgid) === 1;
 
   const list = useMemo(() => {
-    const arr = Array.isArray(data) ? data : data ? [data] : [];
+    const raw = props.data;
+    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
-  }, [data]);
+  }, [props.data]);
 
   const [visibleCount, setVisibleCount] = useState(1);
   const [showEndAds, setShowEndAds] = useState(false);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
 
-  // 1. Kích hoạt hiện khung Ads sớm hơn (khi cách đáy màn hình 600px)
+  const endAdsRef = useRef<HTMLDivElement>(null);
+  const midInjectedRef = useRef(false);
+
+  // 1. CHÈN QUẢNG CÁO VÀO THẺ CÓ SẴN TRONG CONTENT
   useEffect(() => {
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setShowEndAds(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: "600px 0px" } 
-    );
+    // Chỉ chạy 1 lần và chỉ chạy khi đã có nội dung bài viết
+    if (midInjectedRef.current || list.length === 0) return;
 
-    const sentinel = document.getElementById("ad-sentinel");
-    if (sentinel) io.observe(sentinel);
-    return () => io.disconnect();
+    const qcDivTaboo = document.getElementById("qctaboo-mid");
+    if (qcDivTaboo) {
+      const newDiv = document.createElement("div");
+      if (useMgid) {
+        newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
+      } else {
+        newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
+      }
+      qcDivTaboo.appendChild(newDiv);
+      midInjectedRef.current = true;
+    }
+  }, [list, useMgid, mgWidgetId1]);
+
+  // 2. TỰ ĐỘNG HIỆN KHỐI END-ADS KHI CUỘN GẦN HẾT BÀI 1
+  useEffect(() => {
+    const handleInitialScroll = () => {
+      if (window.scrollY > 500) { // Khi cuộn qua 500px thì bắt đầu chuẩn bị khối Ads cuối
+        setShowEndAds(true);
+        window.removeEventListener("scroll", handleInitialScroll);
+      }
+    };
+    window.addEventListener("scroll", handleInitialScroll);
+    return () => window.removeEventListener("scroll", handleInitialScroll);
   }, []);
 
-  // 2. LOGIC QUAN TRỌNG: Bung bài 2 khi quảng cáo hiện 30% màn hình
+  // 3. LOGIC BUNG BÀI 2: Khi Ads hiện đúng 30% chiều cao màn hình
   useEffect(() => {
-    if (!showEndAds || visibleCount >= list.length) return;
+    if (!showEndAds || expanded || list.length < 2) return;
 
     const onScroll = () => {
-      const el = triggerRef.current;
+      const el = endAdsRef.current;
       if (!el) return;
 
       const rect = el.getBoundingClientRect();
       const vh = window.innerHeight;
-      
-      // Tính toán: Khi đỉnh của khung quảng cáo đã đi lên được 30% chiều cao màn hình tính từ đáy
-      // Nghĩa là: khoảng cách từ đỉnh màn hình tới element <= 70% chiều cao màn hình
-      const isReached30Percent = rect.top <= vh * 0.7;
 
-      if (isReached30Percent) {
+      // rect.top là khoảng cách từ đỉnh màn hình đến đầu khối Ads.
+      // vh * 0.7 nghĩa là vạch 70% màn hình tính từ trên xuống (tương đương 30% từ dưới lên).
+      if (rect.top <= vh * 0.7 && rect.top > 0) {
         setVisibleCount(list.length);
+        setExpanded(true);
         window.removeEventListener("scroll", onScroll);
       }
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [showEndAds, list.length, visibleCount]);
-
-  // 3. Iframe Resize
-  useEffect(() => {
-    document.querySelectorAll("iframe").forEach((iframe) => {
-      if (!iframe.src) return;
-      const isMobile = window.innerWidth <= 525;
-      iframe.style.width = "100%";
-      if (iframe.src.includes("twitter")) {
-        iframe.style.height = isMobile ? "650px" : "827px";
-        if (!isMobile) iframe.style.width = "550px";
-      } else {
-        iframe.style.height = isMobile ? "250px" : "300px";
-      }
-    });
-  }, [visibleCount]);
-
-  const first = list[0];
+  }, [showEndAds, expanded, list.length]);
 
   return (
     <>
       <Head>
-        <title>{first ? `${first.name} - ${first.userCode}` : "News"}</title>
+        <title>{list[0]?.name || "News"}</title>
       </Head>
 
       {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
       {googleTagId && (
-        <>
-          <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
-          <Script id="ga-config" strategy="afterInteractive">
-            {`window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', '${googleTagId}');`}
-          </Script>
-        </>
+        <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
       )}
 
       <main>
         {list.slice(0, visibleCount).map((article, idx) => (
           <div key={article.id || idx}>
-            <ArticleItem article={article} idx={idx} isFirst={idx === 0} />
+            <ArticleItem article={article} idx={idx} />
+            
+            {/* Khối quảng cáo nằm giữa bài 1 và bài 2 (Trigger bung bài) */}
             {idx === 0 && (
-              <>
-                {/* MID ADS */}
-                {/* <div id="qctaboo-mid" className="my-10">
-                  {useMgid ? (
-                    <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
-                  ) : (
-                    <div id="taboola-below-mid-article"></div>
-                  )}
-                  
-                </div> */}
-                <Script id="mid-load" strategy="afterInteractive">
-                    {useMgid 
-                      ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
-                      : `window._taboola = window._taboola || [];
-                         _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`}
-                  </Script>
-                {/* Điểm kích hoạt hiện Ads */}
-                <div id="ad-sentinel" style={{ height: "1px" }} />
-              </>
+              <div 
+                ref={endAdsRef} 
+                style={{ 
+                  minHeight: showEndAds ? '320px' : '1px', 
+                  margin: '20px 0' 
+                }}
+              >
+                {showEndAds && (
+                  <>
+                    {useMgid ? (
+                      <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
+                    ) : (
+                      <div id="taboola-below-article-thumbnails" />
+                    )}
+                    <Script id="end-ads-init" strategy="afterInteractive">
+                      {useMgid 
+                        ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+                        : `window._taboola = window._taboola || [];
+                           _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
+                           _taboola.push({ flush: true });`}
+                    </Script>
+                  </>
+                )}
+              </div>
             )}
-            {idx < visibleCount - 1 && <hr style={{ margin: "50px 0", border: '0', borderTop: '2px dashed #eee' }} />}
           </div>
         ))}
-
-        {/* VÙNG QUẢNG CÁO CUỐI BÀI 1 */}
-        <div 
-          ref={triggerRef} 
-          style={{ 
-            minHeight: showEndAds ? '350px' : '0px', 
-            visibility: showEndAds ? 'visible' : 'hidden',
-            marginTop: '20px'
-          }}
-        >
-          {showEndAds && (
-            <>
-              {useMgid ? (
-                <>
-                  <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId}></div>
-                  <Script id="mgid-f-load" strategy="afterInteractive">
-                    {`(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`}
-                  </Script>
-                </>
-              ) : (
-                <>
-                  <div id="taboola-below-article-thumbnails"></div>
-                  <Script id="taboola-f-load" strategy="afterInteractive">
-                    {`window._taboola = window._taboola || [];
-                      _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
-                      _taboola.push({ flush: true });`}
-                  </Script>
-                </>
-              )}
-            </>
-          )}
-        </div>
+        
+        {/* Nạp script cho cái ID qctaboo-mid nằm trong content */}
+        <Script id="mid-content-init" strategy="afterInteractive">
+          {useMgid 
+            ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+            : `window._taboola = window._taboola || [];
+               _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`}
+        </Script>
       </main>
     </>
   );
 }
 
-/* ================== NEXT DATA ================== */
-export async function getStaticPaths() {
-  return { paths: [], fallback: "blocking" };
-}
-
+/* ================== SERVER SIDE ================== */
+export async function getStaticPaths() { return { paths: [], fallback: "blocking" }; }
 export async function getStaticProps({ params }: any) {
   try {
     const id = getIdFromSlug(params?.slug);
