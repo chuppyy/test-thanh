@@ -16,20 +16,11 @@ type NewsMainModel = {
 };
 
 type PageParameters = {
-  // mid-article
-  mgWidgetId1?: string;
-
-  // end-article
-  mgWidgetFeedId?: string;
-
-  // common
-  adsKeeperSrc?: string;
-  googleTagId?: string;
-  isMgid?: number | string; // 1 = MGID, 0 = Taboola
-
-  // FEJI ids (nếu bạn muốn cấu hình)
-  fejiHbZone?: string; // "feji.io_long"
-  fejiPlayerId?: string; // "feji.io_1723454353847"
+  mgWidgetId1: string;
+  mgWidgetFeedId: string;
+  adsKeeperSrc: string;
+  googleTagId: string;
+  isMgid: number; // 1 = MGID, 0 = Taboola
 };
 
 type PageProps = {
@@ -37,7 +28,7 @@ type PageProps = {
   parameters: PageParameters;
 };
 
-/* ================== UTILS ================== */
+/* ================== HELPERS ================== */
 const formatDate = (str?: string) => {
   if (!str) return "";
   const d = new Date(str);
@@ -63,60 +54,55 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
+// FEJI constants (không cần truyền từ parameters)
+const FEJI_HB_ZONE = "feji.io_long";
+const FEJI_PLAYER_ID = "feji.io_1723454353847";
+
 /* ================== PAGE ================== */
 export default function Page(props: PageProps) {
-  const {
-    mgWidgetId1 = "",
-    mgWidgetFeedId = "",
-    adsKeeperSrc = "",
-    googleTagId = "",
-    isMgid = 0,
-    fejiHbZone = "feji.io_long",
-    fejiPlayerId = "feji.io_1723454353847",
-  } = props.parameters || {};
+  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } =
+    props.parameters;
 
   const useMgid = Number(isMgid) === 1;
 
-  // normalize -> list
   const list = useMemo(() => {
     const raw = props.data;
     const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
   }, [props.data]);
 
-  // visible: ban đầu chỉ bài 1
+  // ban đầu chỉ hiển thị bài 1
   const [visible, setVisible] = useState<NewsMainModel[]>(() =>
     list.length ? [list[0]] : []
   );
 
-  // ads cuối bài: ban đầu ẩn
   const [showEndAds, setShowEndAds] = useState(false);
-
-  // đã bung bài 2 chưa
   const [expanded, setExpanded] = useState(false);
 
-  // sentinel A: gần hết bài 1 -> show end-ads
+  // sentinel gần hết bài 1 -> hiện end-ads
   const sentinelShowAdsRef = useRef<HTMLDivElement | null>(null);
 
-  // ref để đo vị trí end-ads trong viewport
+  // ref đo vị trí end-ads trong viewport
   const endAdsRef = useRef<HTMLDivElement | null>(null);
+
+  // guard: mid widget chỉ append 1 lần
+  const midInjectedRef = useRef(false);
 
   // reset khi list thay đổi
   useEffect(() => {
     setVisible(list.length ? [list[0]] : []);
     setShowEndAds(false);
     setExpanded(false);
+    midInjectedRef.current = false;
   }, [list]);
 
-  /* ===== (1) GẦN HẾT BÀI 1 => HIỆN END-ADS ===== */
+  /* (1) gần hết bài 1 => hiện end-ads */
   useEffect(() => {
     const el = sentinelShowAdsRef.current;
     if (!el || showEndAds) return;
 
     const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setShowEndAds(true);
-      },
+      ([entry]) => entry.isIntersecting && setShowEndAds(true),
       { rootMargin: "200px 0px", threshold: 0.01 }
     );
 
@@ -124,15 +110,9 @@ export default function Page(props: PageProps) {
     return () => io.disconnect();
   }, [showEndAds]);
 
-  /* ===== (2) END-ADS VỪA “LÓ” ~10% VIEWPORT => BUNG BÀI 2 =====
-     Điều kiện:
-     - rect.top <= 0.9 * vh  => ads đã vào viewport ~10%
-     - rect.top > 0          => ads chưa lên tới top (bài 1 vẫn còn ở trên)
-  */
+  /* (2) end-ads vừa “ló” ~10% viewport => bung bài 2 */
   useEffect(() => {
-    if (!showEndAds) return;
-    if (expanded) return;
-    if (list.length < 2) return;
+    if (!showEndAds || expanded || list.length < 2) return;
 
     const onScroll = () => {
       const adsEl = endAdsRef.current;
@@ -141,9 +121,10 @@ export default function Page(props: PageProps) {
       const rect = adsEl.getBoundingClientRect();
       const vh = window.innerHeight;
 
-      const adsShownAbout10Percent = rect.top <= vh * 0.65 && rect.top > 0;
+      // ads top <= 90% viewport (ló ~10%), và chưa chạm top (bài 1 vẫn còn ở trên)
+      const trigger = rect.top <= vh * 0.9 && rect.top > 0;
 
-      if (adsShownAbout10Percent) {
+      if (trigger) {
         setVisible(list); // bung bài 2
         setExpanded(true);
         window.removeEventListener("scroll", onScroll);
@@ -156,12 +137,35 @@ export default function Page(props: PageProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, [showEndAds, expanded, list]);
 
-  /* ===== IFRAME RESIZE: chạy lại khi bung bài 2 ===== */
+  /* Slot giữa bài + resize iframe: giữ kiểu code cũ nhưng chống duplicate */
   useEffect(() => {
     try {
+      // ====== GIỮA BÀI: append vào #qctaboo-mid đúng 1 lần ======
+      const qcDivTaboo = document.getElementById("qctaboo-mid");
+      if (qcDivTaboo) {
+        const alreadyHasMid =
+          qcDivTaboo.querySelector("#taboola-below-mid-article") ||
+          qcDivTaboo.querySelector('[data-type="_mgwidget"]');
+
+        if (!alreadyHasMid && !midInjectedRef.current) {
+          const newDiv = document.createElement("div");
+
+          if (useMgid) {
+            newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
+          } else {
+            newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
+          }
+
+          qcDivTaboo.appendChild(newDiv);
+          midInjectedRef.current = true;
+        }
+      }
+
+      // ====== Resize iframe (chạy lại khi bung bài 2) ======
       const iframes = document.querySelectorAll("iframe");
       iframes.forEach((iframe: HTMLIFrameElement) => {
         if (!iframe?.src) return;
+
         if (iframe.src.includes("twitter")) {
           iframe.style.height = window.innerWidth <= 525 ? "650px" : "827px";
           iframe.style.width = window.innerWidth <= 525 ? "100%" : "550px";
@@ -174,9 +178,9 @@ export default function Page(props: PageProps) {
         }
       });
     } catch (err) {
-      console.error("Error with iframe resize", err);
+      console.error("Error with mid-widget/iframes", err);
     }
-  }, [visible.length]);
+  }, [useMgid, mgWidgetId1, visible.length]);
 
   const first = visible[0];
 
@@ -184,14 +188,23 @@ export default function Page(props: PageProps) {
     <>
       <Head>
         <title>{first ? `${first.name}-${first.userCode}` : "News"}</title>
-        {first?.avatarLink ? <meta property="og:image" content={first.avatarLink} /> : null}
-        {first ? <meta property="og:title" content={`${first.name}-${first.userCode}`} /> : null}
+        {first?.avatarLink ? (
+          <meta property="og:image" content={first.avatarLink} />
+        ) : null}
+        {first ? (
+          <meta
+            property="og:title"
+            content={`${first.name}-${first.userCode}`}
+          />
+        ) : null}
       </Head>
 
       {/* AdsKeeper */}
-      {adsKeeperSrc ? <Script src={adsKeeperSrc} strategy="afterInteractive" /> : null}
+      {adsKeeperSrc ? (
+        <Script src={adsKeeperSrc} strategy="afterInteractive" />
+      ) : null}
 
-      {/* Google Analytics */}
+      {/* GA */}
       {googleTagId ? (
         <>
           <Script
@@ -215,23 +228,33 @@ export default function Page(props: PageProps) {
       ) : null}
 
       <main>
-        {/* =================== ARTICLES =================== */}
+        {/* ============ ARTICLES ============ */}
         {visible.map((article, idx) => (
           <section
             key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
             className="container-flu details"
           >
-            {/* ===== Banner theo bài ===== */}
+            {/* Banner theo bài */}
             {idx === 0 && (
-              <div className="adsconex-banner" data-ad-placement="banner1" id="ub-banner1" />
+              <div
+                className="adsconex-banner"
+                data-ad-placement="banner1"
+                id="ub-banner1"
+              />
             )}
+
+            {/* ✅ Bài 2: đổi banner2 -> banner10 */}
             {idx === 1 && (
-              <div className="adsconex-banner" data-ad-placement="banner10" id="ub-banner10" />
+              <div
+                className="adsconex-banner"
+                data-ad-placement="banner10"
+                id="ub-banner10"
+              />
             )}
 
             <h1>{article.name}</h1>
 
-            {/* ===== FEJI chỉ cho bài 1 ===== */}
+            {/* FEJI chỉ bài 1 */}
             {idx === 0 && (
               <>
                 <Script
@@ -240,18 +263,19 @@ export default function Page(props: PageProps) {
                   dangerouslySetInnerHTML={{
                     __html: `
                       window.unibotshb = window.unibotshb || { cmd: [] };
-                      window.unibotshb.cmd.push(function () { ubHB("${fejiHbZone}"); });
+                      window.unibotshb.cmd.push(function () { ubHB("${FEJI_HB_ZONE}"); });
                     `,
                   }}
                 />
-                <div id={`div-ub-${fejiPlayerId}`}>
+
+                <div id={`div-ub-${FEJI_PLAYER_ID}`}>
                   <Script
                     id="feji-player-init"
                     strategy="afterInteractive"
                     dangerouslySetInnerHTML={{
                       __html: `
                         window.unibots = window.unibots || { cmd: [] };
-                        window.unibots.cmd.push(function () { unibotsPlayer("${fejiPlayerId}"); });
+                        window.unibots.cmd.push(function () { unibotsPlayer("${FEJI_PLAYER_ID}"); });
                       `,
                     }}
                   />
@@ -259,7 +283,9 @@ export default function Page(props: PageProps) {
               </>
             )}
 
-            <p className="mb-4 text-lg">Posted: {formatDate(article.dateTimeStart)}</p>
+            <p className="mb-4 text-lg">
+              Posted: {formatDate(article.dateTimeStart)}
+            </p>
 
             <Suspense fallback={<p>Loading...</p>}>
               <article
@@ -268,62 +294,54 @@ export default function Page(props: PageProps) {
               />
             </Suspense>
 
-            {/* phân cách giữa bài 1 và bài 2 */}
-            {idx < visible.length - 1 && <hr style={{ margin: "32px 0" }} />}
-
-            {/* ===== Giữa bài (slot ads) chỉ render 1 lần sau nội dung bài 1 ===== */}
-            {idx === 0 && (
-              <>
-                <div id="qctaboo-mid">
-                  {useMgid ? (
-                    <div data-type="_mgwidget" data-widget-id={mgWidgetId1} />
-                  ) : (
-                    <div id="taboola-below-mid-article" />
-                  )}
-                </div>
-
-                {!useMgid ? (
-                  <Script
-                    id="taboola-mid"
-                    strategy="afterInteractive"
-                    dangerouslySetInnerHTML={{
-                      __html: `
-                        window._taboola = window._taboola || [];
-                        _taboola.push({
-                          mode: 'thumbs-feed-01-b',
-                          container: 'taboola-below-mid-article',
-                          placement: 'Mid article',
-                          target_type: 'mix'
-                        });
-                      `,
-                    }}
-                  />
-                ) : (
-                  <Script
-                    id="mgid-mid-load"
-                    strategy="afterInteractive"
-                    dangerouslySetInnerHTML={{
-                      __html: `
-                        (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
-                        (window,"_mgq");
-                      `,
-                    }}
-                  />
-                )}
-              </>
+            {idx < visible.length - 1 && (
+              <hr style={{ margin: "32px 0" }} />
             )}
           </section>
         ))}
 
-        {/* Sentinel A: gần hết bài 1 => hiện end-ads */}
+        {/* ===== Slot giữa bài: container đặt ngoài, chỉ 1 lần ===== */}
+        {/* <div id="qctaboo-mid" /> */}
+
+        {/* Script init cho MID (chỉ render 1 lần vì nằm ngoài map) */}
+        {useMgid ? (
+          <Script
+            id="mgid-mid-load"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
+                (window,"_mgq");
+              `,
+            }}
+          />
+        ) : (
+          <Script
+            id="taboola-mid"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
+                window._taboola = window._taboola || [];
+                _taboola.push({
+                  mode: 'thumbs-feed-01-b',
+                  container: 'taboola-below-mid-article',
+                  placement: 'Mid article',
+                  target_type: 'mix'
+                });
+              `,
+            }}
+          />
+        )}
+
+        {/* Sentinel: gần hết bài 1 -> show end ads */}
         <div ref={sentinelShowAdsRef} style={{ height: 1 }} />
 
-        {/* =================== END-ARTICLE-ADS (HIỆN TRƯỚC) =================== */}
+        {/* ============ END ARTICLE ADS ============ */}
         {showEndAds && (
           <div ref={endAdsRef} className="end-article-ads">
             {useMgid ? (
               <>
-                {mgWidgetFeedId ? <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} /> : null}
+                <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
                 <Script
                   id="mgid-feed-load"
                   strategy="afterInteractive"
@@ -363,36 +381,52 @@ export default function Page(props: PageProps) {
   );
 }
 
-/* ================== DATA FETCH ================== */
+/* ================== NEXT DATA ================== */
 export async function getStaticPaths() {
   return { paths: [], fallback: "blocking" };
 }
 
 export async function getStaticProps({ params }: { params: any }) {
-  const slug = params?.slug as string | undefined;
-  const id = getIdFromSlug(slug);
+  try {
+    const slug = params?.slug as string | undefined;
+    const id = getIdFromSlug(slug);
 
-  const res = await fetch(
-    `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
-  );
-  const json = await res.json();
+    // ✅ đổi API sang news-detailvip
+    const res = await fetch(
+      `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
+    );
+    const json = await res.json();
 
-  // Bạn nói API trả list 2 bài -> json.data là array
-  const parameters: PageParameters = {
-    mgWidgetId1: "1903360",
-    mgWidgetFeedId: "1903357",
-    adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
-    googleTagId: "G-RZ218Z0QZ1",
-    isMgid: 0,
-    fejiHbZone: "feji.io_long",
-    fejiPlayerId: "feji.io_1723454353847",
-  };
+    // ✅ bạn chỉ cần truyền 5 giá trị như yêu cầu
+    const parameters: PageParameters = {
+      mgWidgetId1: "1903360",
+      mgWidgetFeedId: "1903357",
+      adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
+      googleTagId: "G-RZ218Z0QZ1",
+      isMgid: 0,
+    };
 
-  return {
-    props: {
-      data: json?.data ?? [],
-      parameters,
-    },
-    revalidate: 360000,
-  };
+    return {
+      props: {
+        data: json?.data ?? [],
+        parameters,
+      },
+      revalidate: 360000,
+    };
+  } catch (err) {
+    // fallback an toàn
+    return {
+      props: {
+        data: [],
+        parameters: {
+          mgWidgetId1: "1903360",
+          mgWidgetFeedId: "1903357",
+          adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
+          googleTagId: "G-RZ218Z0QZ1",
+          isMgid: 0,
+        },
+      },
+      revalidate: 60,
+    };
+  }
 }
