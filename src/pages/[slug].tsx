@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, Suspense, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import Script from "next/script";
 import Head from "next/head";
 
@@ -6,13 +6,9 @@ import Head from "next/head";
 type NewsMainModel = {
   id: string | null;
   name: string;
-  summary?: string;
   userCode: string;
   content?: string;
-  avatarLink?: string;
-  urlRootLink?: string;
   isDeleted?: boolean;
-  dateTimeStart?: string;
 };
 
 type PageParameters = {
@@ -32,13 +28,9 @@ type PageProps = {
 const normalize = (x: any): NewsMainModel => ({
   id: x?.id ?? x?.Id ?? null,
   name: x?.name ?? x?.Name ?? "",
-  summary: x?.summary ?? x?.Summary ?? "",
   userCode: x?.userCode ?? x?.UserCode ?? "",
   content: x?.content ?? x?.Content ?? "",
-  avatarLink: x?.avatarLink ?? x?.AvatarLink ?? "",
-  urlRootLink: x?.urlRootLink ?? x?.UrlRootLink ?? "",
   isDeleted: x?.isDeleted ?? x?.IsDeleted ?? false,
-  dateTimeStart: x?.dateTimeStart ?? x?.DateTimeStart ?? "",
 });
 
 const getIdFromSlug = (slug?: string) => {
@@ -47,97 +39,61 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
-/* ================== SUB-COMPONENT ================== */
-const ArticleItem = memo(({ article, idx }: { article: NewsMainModel; idx: number }) => (
-  <section className="container-flu details">
-    {/* Banner mặc định */}
-    <div 
-      className="adsconex-banner" 
-      data-ad-placement={idx === 0 ? "banner1" : "banner10"} 
-      id={idx === 0 ? "ub-banner1" : "ub-banner10"} 
-    />
-    <h1>{article.name}</h1>
-    
-    <Suspense fallback={<p>Loading...</p>}>
-      {/* Nội dung bài viết - Nơi chứa thẻ <div id="qctaboo-mid"> sẵn có */}
-      <article className="content" dangerouslySetInnerHTML={{ __html: article.content || "" }} />
-    </Suspense>
-  </section>
-));
-
-ArticleItem.displayName = "ArticleItem";
-
 /* ================== MAIN PAGE ================== */
-export default function Page(props: PageProps) {
-  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = props.parameters;
+export default function Page({ data, parameters }: PageProps) {
+  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
   const useMgid = Number(isMgid) === 1;
 
+  // Xử lý danh sách bài viết
   const list = useMemo(() => {
-    const raw = props.data;
-    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const arr = Array.isArray(data) ? data : data ? [data] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
-  }, [props.data]);
+  }, [data]);
 
   const [visibleCount, setVisibleCount] = useState(1);
-  const [showEndAds, setShowEndAds] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const isExpanded = useRef(false);
 
-  const endAdsRef = useRef<HTMLDivElement>(null);
-  const midInjectedRef = useRef(false);
-
-  // 1. CHÈN QUẢNG CÁO VÀO THẺ CÓ SẴN TRONG CONTENT
+  // LOGIC QUAN TRỌNG: Bung bài khi quảng cáo hiện 30% màn hình
   useEffect(() => {
-    // Chỉ chạy 1 lần và chỉ chạy khi đã có nội dung bài viết
-    if (midInjectedRef.current || list.length === 0) return;
+    if (list.length < 2) return;
 
-    const qcDivTaboo = document.getElementById("qctaboo-mid");
-    if (qcDivTaboo) {
-      const newDiv = document.createElement("div");
-      if (useMgid) {
-        newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
-      } else {
-        newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
-      }
-      qcDivTaboo.appendChild(newDiv);
-      midInjectedRef.current = true;
-    }
-  }, [list, useMgid, mgWidgetId1]);
+    const handleScroll = () => {
+      if (isExpanded.current || !triggerRef.current) return;
 
-  // 2. TỰ ĐỘNG HIỆN KHỐI END-ADS KHI CUỘN GẦN HẾT BÀI 1
-  useEffect(() => {
-    const handleInitialScroll = () => {
-      if (window.scrollY > 500) { // Khi cuộn qua 500px thì bắt đầu chuẩn bị khối Ads cuối
-        setShowEndAds(true);
-        window.removeEventListener("scroll", handleInitialScroll);
-      }
-    };
-    window.addEventListener("scroll", handleInitialScroll);
-    return () => window.removeEventListener("scroll", handleInitialScroll);
-  }, []);
+      const rect = triggerRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
 
-  // 3. LOGIC BUNG BÀI 2: Khi Ads hiện đúng 30% chiều cao màn hình
-  useEffect(() => {
-    if (!showEndAds || expanded || list.length < 2) return;
-
-    const onScroll = () => {
-      const el = endAdsRef.current;
-      if (!el) return;
-
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-
-      // rect.top là khoảng cách từ đỉnh màn hình đến đầu khối Ads.
-      // vh * 0.7 nghĩa là vạch 70% màn hình tính từ trên xuống (tương đương 30% từ dưới lên).
-      if (rect.top <= vh * 0.7 && rect.top > 0) {
+      // Kích hoạt khi "đỉnh" của khối quảng cáo cách đỉnh màn hình 70% chiều cao 
+      // (Tương đương việc nó đã hiện lên được 30% từ dưới lên)
+      if (rect.top <= viewportHeight * 0.7) {
         setVisibleCount(list.length);
-        setExpanded(true);
-        window.removeEventListener("scroll", onScroll);
+        isExpanded.current = true;
+        window.removeEventListener("scroll", handleScroll);
       }
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [showEndAds, expanded, list.length]);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    // Kiểm tra ngay lập tức nếu bài 1 quá ngắn
+    handleScroll();
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [list.length]);
+
+  // Xử lý nội dung bài viết để chèn quảng cáo vào đúng ID qctaboo-mid
+  const renderContentWithAds = (content: string) => {
+    if (!content) return "";
+    
+    // Nếu là MGID
+    if (useMgid) {
+      const mgidHtml = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
+      return content.replace('id="qctaboo-mid"', `id="qctaboo-mid">${mgidHtml}`);
+    } 
+    
+    // Nếu là Taboola
+    const taboolaHtml = `<div id="taboola-below-mid-article"></div>`;
+    return content.replace('id="qctaboo-mid"', `id="qctaboo-mid">${taboolaHtml}`);
+  };
 
   return (
     <>
@@ -145,6 +101,7 @@ export default function Page(props: PageProps) {
         <title>{list[0]?.name || "News"}</title>
       </Head>
 
+      {/* Nạp script quảng cáo và GA */}
       {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
       {googleTagId && (
         <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
@@ -152,53 +109,64 @@ export default function Page(props: PageProps) {
 
       <main>
         {list.slice(0, visibleCount).map((article, idx) => (
-          <div key={article.id || idx}>
-            <ArticleItem article={article} idx={idx} />
-            
-            {/* Khối quảng cáo nằm giữa bài 1 và bài 2 (Trigger bung bài) */}
+          <div key={article.id || idx} className="article-wrapper">
+            <section className="container-flu details">
+              <h1>{article.name}</h1>
+              <article 
+                className="content" 
+                dangerouslySetInnerHTML={{ __html: renderContentWithAds(article.content || "") }} 
+              />
+            </section>
+
+            {/* QUẢNG CÁO GIỮA BÀI 1 VÀ BÀI 2 (TRIGGER) */}
             {idx === 0 && (
               <div 
-                ref={endAdsRef} 
+                ref={triggerRef} 
+                className="ads-trigger-container"
                 style={{ 
-                  minHeight: showEndAds ? '320px' : '1px', 
-                  margin: '20px 0' 
+                  minHeight: "300px", 
+                  margin: "40px 0",
+                  background: "#fcfcfc",
+                  borderTop: "1px solid #eee"
                 }}
               >
-                {showEndAds && (
-                  <>
-                    {useMgid ? (
-                      <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
-                    ) : (
-                      <div id="taboola-below-article-thumbnails" />
-                    )}
-                    <Script id="end-ads-init" strategy="afterInteractive">
-                      {useMgid 
-                        ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
-                        : `window._taboola = window._taboola || [];
-                           _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
-                           _taboola.push({ flush: true });`}
-                    </Script>
-                  </>
+                {/* Khối quảng cáo Feed/Thumbnails */}
+                {useMgid ? (
+                  <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
+                ) : (
+                  <div id="taboola-below-article-thumbnails" />
                 )}
+                
+                {/* Script kích hoạt cho cả Mid và End Ads */}
+                <Script id={`ads-init-${idx}`} strategy="afterInteractive">
+                  {useMgid 
+                    ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+                    : `window._taboola = window._taboola || [];
+                       _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });
+                       _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
+                       _taboola.push({ flush: true });`}
+                </Script>
               </div>
             )}
+            
+            {idx > 0 && <hr style={{ margin: "50px 0" }} />}
           </div>
         ))}
-        
-        {/* Nạp script cho cái ID qctaboo-mid nằm trong content */}
-        <Script id="mid-content-init" strategy="afterInteractive">
-          {useMgid 
-            ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
-            : `window._taboola = window._taboola || [];
-               _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`}
-        </Script>
       </main>
+
+      <style jsx global>{`
+        .content iframe { width: 100% !important; height: auto; min-height: 300px; }
+        #qctaboo-mid { margin: 20px 0; min-height: 50px; }
+      `}</style>
     </>
   );
 }
 
 /* ================== SERVER SIDE ================== */
-export async function getStaticPaths() { return { paths: [], fallback: "blocking" }; }
+export async function getStaticPaths() {
+  return { paths: [], fallback: "blocking" };
+}
+
 export async function getStaticProps({ params }: any) {
   try {
     const id = getIdFromSlug(params?.slug);
