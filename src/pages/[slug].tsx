@@ -191,14 +191,14 @@ export default function Page({ data, parameters }: PageProps) {
             {idx === 0 && (
               <>
                 {/* MID ADS */}
-                <div id="qctaboo-mid" className="my-10">
+                {/* <div id="qctaboo-mid" className="my-10">
                   {useMgid ? (
                     <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
                   ) : (
                     <div id="taboola-below-mid-article"></div>
                   )}
                   
-                </div>
+                </div> */}
                 <Script id="mid-load" strategy="afterInteractive">
                     {useMgid 
                       ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
