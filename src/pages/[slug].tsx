@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import Head from "next/head";
 import Script from "next/script";
+import Head from "next/head";
+
 
 /* ================== TYPES ================== */
 type NewsMainModel = {
