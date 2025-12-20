@@ -188,7 +188,27 @@ export default function Page({ data, parameters }: PageProps) {
         {list.slice(0, visibleCount).map((article, idx) => (
           <div key={article.id || idx}>
             <ArticleItem article={article} idx={idx} isFirst={idx === 0} />
-    
+            {idx === 0 && (
+              <>
+                {/* MID ADS */}
+                {/* <div id="qctaboo-mid" className="my-10">
+                  {useMgid ? (
+                    <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
+                  ) : (
+                    <div id="taboola-below-mid-article"></div>
+                  )}
+                  
+                </div> */}
+                <Script id="mid-load" strategy="afterInteractive">
+                    {useMgid 
+                      ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+                      : `window._taboola = window._taboola || [];
+                         _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`}
+                  </Script>
+                {/* Điểm kích hoạt hiện Ads */}
+                <div id="ad-sentinel" style={{ height: "1px" }} />
+              </>
+            )}
             {idx < visibleCount - 1 && <hr style={{ margin: "50px 0", border: '0', borderTop: '2px dashed #eee' }} />}
           </div>
         ))}
