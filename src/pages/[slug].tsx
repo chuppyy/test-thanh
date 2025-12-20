@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import Head from "next/head";
+
 import Script from "next/script";
+import Head from "next/head";
 
 /* ================== TYPES ================== */
 type NewsMainModel = {
@@ -122,7 +123,7 @@ export default function Page(props: PageProps) {
       const vh = window.innerHeight;
 
       // ads top <= 90% viewport (ló ~10%), và chưa chạm top (bài 1 vẫn còn ở trên)
-      const trigger = rect.top <= vh * 0.9 && rect.top > 0;
+      const trigger = rect.top <= vh * 0.65 && rect.top > 0;
 
       if (trigger) {
         setVisible(list); // bung bài 2
