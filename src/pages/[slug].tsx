@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense, memo } from "react";
 import Script from "next/script";
 import Head from "next/head";
-/* ================== TYPES ================== */
+
+/* ================== TYPES & CONSTANTS ================== */
 type NewsMainModel = {
   id: string | null;
   name: string;
@@ -19,7 +20,7 @@ type PageParameters = {
   mgWidgetFeedId: string;
   adsKeeperSrc: string;
   googleTagId: string;
-  isMgid: number; // 1 = MGID, 0 = Taboola
+  isMgid: number;
 };
 
 type PageProps = {
@@ -27,12 +28,14 @@ type PageProps = {
   parameters: PageParameters;
 };
 
+const FEJI_HB_ZONE = "feji.io_long";
+const FEJI_PLAYER_ID = "feji.io_1723454353847";
+
 /* ================== HELPERS ================== */
 const formatDate = (str?: string) => {
   if (!str) return "";
   const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().split('T')[0];
 };
 
 const normalize = (x: any): NewsMainModel => ({
@@ -53,324 +56,199 @@ const getIdFromSlug = (slug?: string) => {
   return s.slice(s.lastIndexOf("-") + 1);
 };
 
-// FEJI constants (không cần truyền từ parameters)
-const FEJI_HB_ZONE = "feji.io_long";
-const FEJI_PLAYER_ID = "feji.io_1723454353847";
+/* ================== SUB-COMPONENTS ================== */
+// Memoize ArticleItem để tránh render lại không cần thiết
+const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; idx: number; isFirst: boolean }) => (
+  <section className="container-flu details">
+    {/* Dynamic Banner Placement */}
+    <div 
+      className="adsconex-banner" 
+      data-ad-placement={idx === 0 ? "banner1" : "banner10"} 
+      id={idx === 0 ? "ub-banner1" : "ub-banner10"} 
+    />
 
-/* ================== PAGE ================== */
-export default function Page(props: PageProps) {
-  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } =
-    props.parameters;
+    <h1>{article.name}</h1>
 
+    {isFirst && (
+      <>
+        <Script id="feji-hb-init" strategy="afterInteractive">
+          {`window.unibotshb = window.unibotshb || { cmd: [] };
+            window.unibotshb.cmd.push(function () { ubHB("${FEJI_HB_ZONE}"); });`}
+        </Script>
+        <div id={`div-ub-${FEJI_PLAYER_ID}`}>
+          <Script id="feji-player-init" strategy="afterInteractive">
+            {`window.unibots = window.unibots || { cmd: [] };
+              window.unibots.cmd.push(function () { unibotsPlayer("${FEJI_PLAYER_ID}"); });`}
+          </Script>
+        </div>
+      </>
+    )}
+
+    <p className="mb-4 text-lg" style={{ color: '#666' }}>
+      Posted: {formatDate(article.dateTimeStart)}
+    </p>
+
+    <Suspense fallback={<p>Loading content...</p>}>
+      <article 
+        className="content" 
+        dangerouslySetInnerHTML={{ __html: article.content || "" }} 
+      />
+    </Suspense>
+    
+    <hr style={{ margin: "40px 0", opacity: 0.2 }} />
+  </section>
+));
+
+ArticleItem.displayName = "ArticleItem";
+
+/* ================== MAIN PAGE ================== */
+export default function Page({ data, parameters }: PageProps) {
+  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
   const useMgid = Number(isMgid) === 1;
 
+  // Xử lý list dữ liệu
   const list = useMemo(() => {
-    const raw = props.data;
-    const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    const arr = Array.isArray(data) ? data : data ? [data] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
-  }, [props.data]);
+  }, [data]);
 
-  // ban đầu chỉ hiển thị bài 1
-  const [visible, setVisible] = useState<NewsMainModel[]>(() =>
-    list.length ? [list[0]] : []
-  );
-
+  const [visibleCount, setVisibleCount] = useState(1);
   const [showEndAds, setShowEndAds] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  
+  const sentinelAdsRef = useRef<HTMLDivElement>(null);
+  const triggerNextRef = useRef<HTMLDivElement>(null);
 
-  // sentinel gần hết bài 1 -> hiện end-ads
-  const sentinelShowAdsRef = useRef<HTMLDivElement | null>(null);
-
-  // ref đo vị trí end-ads trong viewport
-  const endAdsRef = useRef<HTMLDivElement | null>(null);
-
-  // guard: mid widget chỉ append 1 lần
-  const midInjectedRef = useRef(false);
-
-  // reset khi list thay đổi
+  // 1. Tối ưu Iframe Resize
   useEffect(() => {
-    setVisible(list.length ? [list[0]] : []);
-    setShowEndAds(false);
-    setExpanded(false);
-    midInjectedRef.current = false;
-  }, [list]);
-
-  /* (1) gần hết bài 1 => hiện end-ads */
-  useEffect(() => {
-    const el = sentinelShowAdsRef.current;
-    if (!el || showEndAds) return;
-
-    const io = new IntersectionObserver(
-      ([entry]) => entry.isIntersecting && setShowEndAds(true),
-      { rootMargin: "200px 0px", threshold: 0.01 }
-    );
-
-    io.observe(el);
-    return () => io.disconnect();
-  }, [showEndAds]);
-
-  /* (2) end-ads vừa “ló” ~10% viewport => bung bài 2 */
-  useEffect(() => {
-    if (!showEndAds || expanded || list.length < 2) return;
-
-    const onScroll = () => {
-      const adsEl = endAdsRef.current;
-      if (!adsEl) return;
-
-      const rect = adsEl.getBoundingClientRect();
-      const vh = window.innerHeight;
-
-      // ads top <= 90% viewport (ló ~10%), và chưa chạm top (bài 1 vẫn còn ở trên)
-      const trigger = rect.top <= vh * 0.65 && rect.top > 0;
-
-      if (trigger) {
-        setVisible(list); // bung bài 2
-        setExpanded(true);
-        window.removeEventListener("scroll", onScroll);
-      }
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [showEndAds, expanded, list]);
-
-  /* Slot giữa bài + resize iframe: giữ kiểu code cũ nhưng chống duplicate */
-  useEffect(() => {
-    try {
-      // ====== GIỮA BÀI: append vào #qctaboo-mid đúng 1 lần ======
-      const qcDivTaboo = document.getElementById("qctaboo-mid");
-      if (qcDivTaboo) {
-        const alreadyHasMid =
-          qcDivTaboo.querySelector("#taboola-below-mid-article") ||
-          qcDivTaboo.querySelector('[data-type="_mgwidget"]');
-
-        if (!alreadyHasMid && !midInjectedRef.current) {
-          const newDiv = document.createElement("div");
-
-          if (useMgid) {
-            newDiv.innerHTML = `<div data-type="_mgwidget" data-widget-id="${mgWidgetId1}"></div>`;
-          } else {
-            newDiv.innerHTML = `<div id="taboola-below-mid-article"></div>`;
-          }
-
-          qcDivTaboo.appendChild(newDiv);
-          midInjectedRef.current = true;
-        }
-      }
-
-      // ====== Resize iframe (chạy lại khi bung bài 2) ======
+    const resizeIframes = () => {
       const iframes = document.querySelectorAll("iframe");
-      iframes.forEach((iframe: HTMLIFrameElement) => {
-        if (!iframe?.src) return;
-
+      const isMobile = window.innerWidth <= 525;
+      
+      iframes.forEach((iframe) => {
+        if (!iframe.src) return;
         if (iframe.src.includes("twitter")) {
-          iframe.style.height = window.innerWidth <= 525 ? "650px" : "827px";
-          iframe.style.width = window.innerWidth <= 525 ? "100%" : "550px";
+          iframe.style.height = isMobile ? "650px" : "827px";
+          iframe.style.width = isMobile ? "100%" : "550px";
         } else if (iframe.src.includes("instagram")) {
-          iframe.style.height = window.innerWidth <= 525 ? "553px" : "628px";
+          iframe.style.height = isMobile ? "553px" : "628px";
           iframe.style.width = "100%";
         } else {
-          iframe.style.height = window.innerWidth <= 525 ? "250px" : "300px";
+          iframe.style.height = isMobile ? "250px" : "300px";
           iframe.style.width = "100%";
         }
       });
-    } catch (err) {
-      console.error("Error with mid-widget/iframes", err);
-    }
-  }, [useMgid, mgWidgetId1, visible.length]);
+    };
 
-  const first = visible[0];
+    resizeIframes();
+    window.addEventListener('resize', resizeIframes);
+    return () => window.removeEventListener('resize', resizeIframes);
+  }, [visibleCount]);
+
+  // 2. Observer: Hiện End Ads khi cuộn đến cuối bài 1
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShowEndAds(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    if (sentinelAdsRef.current) observer.observe(sentinelAdsRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 3. Observer: Bung toàn bộ bài viết khi thấy Ads (Thay thế scroll listener)
+  useEffect(() => {
+    if (!showEndAds || visibleCount >= list.length) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisibleCount(list.length);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 } 
+    );
+
+    if (triggerNextRef.current) observer.observe(triggerNextRef.current);
+    return () => observer.disconnect();
+  }, [showEndAds, list.length, visibleCount]);
+
+  const firstArticle = list[0];
 
   return (
     <>
       <Head>
-        <title>{first ? `${first.name}-${first.userCode}` : "News"}</title>
-        {first?.avatarLink ? (
-          <meta property="og:image" content={first.avatarLink} />
-        ) : null}
-        {first ? (
-          <meta
-            property="og:title"
-            content={`${first.name}-${first.userCode}`}
-          />
-        ) : null}
+        <title>{firstArticle ? `${firstArticle.name} - ${firstArticle.userCode}` : "News"}</title>
+        {firstArticle?.avatarLink && <meta property="og:image" content={firstArticle.avatarLink} />}
+        {firstArticle && <meta property="og:title" content={`${firstArticle.name} - ${firstArticle.userCode}`} />}
       </Head>
 
-      {/* AdsKeeper */}
-      {adsKeeperSrc ? (
-        <Script src={adsKeeperSrc} strategy="afterInteractive" />
-      ) : null}
-
-      {/* GA */}
-      {googleTagId ? (
+      {/* Scripts tối ưu */}
+      {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
+      {googleTagId && (
         <>
-          <Script
-            id="ga-lib"
-            src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
-            strategy="afterInteractive"
-          />
-          <Script
-            id="ga-config"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${googleTagId}');
-              `,
-            }}
-          />
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`} strategy="afterInteractive" />
+          <Script id="ga-config" strategy="afterInteractive">
+            {`window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${googleTagId}');`}
+          </Script>
         </>
-      ) : null}
+      )}
 
       <main>
-        {/* ============ ARTICLES ============ */}
-        {visible.map((article, idx) => (
-          <section
-            key={article.id ?? article.urlRootLink ?? `${idx}-${article.userCode}`}
-            className="container-flu details"
-          >
-            {/* Banner theo bài */}
-            {idx === 0 && (
-              <div
-                className="adsconex-banner"
-                data-ad-placement="banner1"
-                id="ub-banner1"
-              />
-            )}
-
-            {/* ✅ Bài 2: đổi banner2 -> banner10 */}
-            {idx === 1 && (
-              <div
-                className="adsconex-banner"
-                data-ad-placement="banner10"
-                id="ub-banner10"
-              />
-            )}
-
-            <h1>{article.name}</h1>
-
-            {/* FEJI chỉ bài 1 */}
-            {idx === 0 && (
-              <>
-                <Script
-                  id="feji-hb-init"
-                  strategy="afterInteractive"
-                  dangerouslySetInnerHTML={{
-                    __html: `
-                      window.unibotshb = window.unibotshb || { cmd: [] };
-                      window.unibotshb.cmd.push(function () { ubHB("${FEJI_HB_ZONE}"); });
-                    `,
-                  }}
-                />
-
-                <div id={`div-ub-${FEJI_PLAYER_ID}`}>
-                  <Script
-                    id="feji-player-init"
-                    strategy="afterInteractive"
-                    dangerouslySetInnerHTML={{
-                      __html: `
-                        window.unibots = window.unibots || { cmd: [] };
-                        window.unibots.cmd.push(function () { unibotsPlayer("${FEJI_PLAYER_ID}"); });
-                      `,
-                    }}
-                  />
-                </div>
-              </>
-            )}
-
-            <p className="mb-4 text-lg">
-              Posted: {formatDate(article.dateTimeStart)}
-            </p>
-
-            <Suspense fallback={<p>Loading...</p>}>
-              <article
-                className="content"
-                dangerouslySetInnerHTML={{ __html: article.content || "" }}
-              />
-            </Suspense>
-
-            {idx < visible.length - 1 && (
-              <hr style={{ margin: "32px 0" }} />
-            )}
-          </section>
+        {list.slice(0, visibleCount).map((article, idx) => (
+          <ArticleItem 
+            key={article.id || `${idx}-${article.userCode}`} 
+            article={article} 
+            idx={idx} 
+            isFirst={idx === 0} 
+          />
         ))}
 
-        {/* ===== Slot giữa bài: container đặt ngoài, chỉ 1 lần ===== */}
-        {/* <div id="qctaboo-mid" /> */}
+        {/* MID ADS CONTAINER */}
+        <div id="qctaboo-mid" className="my-8">
+            {useMgid ? (
+                <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
+            ) : (
+                <div id="taboola-below-mid-article"></div>
+            )}
+            <Script id="mid-ads-load" strategy="afterInteractive">
+              {useMgid 
+                ? `(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`
+                : `window._taboola = window._taboola || [];
+                   _taboola.push({ mode: 'thumbs-feed-01-b', container: 'taboola-below-mid-article', placement: 'Mid article', target_type: 'mix' });`
+              }
+            </Script>
+        </div>
 
-        {/* Script init cho MID (chỉ render 1 lần vì nằm ngoài map) */}
-        {useMgid ? (
-          <Script
-            id="mgid-mid-load"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
-                (window,"_mgq");
-              `,
-            }}
-          />
-        ) : (
-          <Script
-            id="taboola-mid"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                window._taboola = window._taboola || [];
-                _taboola.push({
-                  mode: 'thumbs-feed-01-b',
-                  container: 'taboola-below-mid-article',
-                  placement: 'Mid article',
-                  target_type: 'mix'
-                });
-              `,
-            }}
-          />
-        )}
+        {/* Sentinel để kích hoạt hiển thị Ads dưới bài */}
+        <div ref={sentinelAdsRef} style={{ height: "1px" }} />
 
-        {/* Sentinel: gần hết bài 1 -> show end ads */}
-        <div ref={sentinelShowAdsRef} style={{ height: 1 }} />
-
-        {/* ============ END ARTICLE ADS ============ */}
+        {/* END ARTICLE ADS & TRIGGER NEXT ARTICLES */}
         {showEndAds && (
-          <div ref={endAdsRef} className="end-article-ads">
+          <div ref={triggerNextRef} className="end-article-ads" style={{ minHeight: '300px' }}>
             {useMgid ? (
               <>
                 <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
-                <Script
-                  id="mgid-feed-load"
-                  strategy="afterInteractive"
-                  dangerouslySetInnerHTML={{
-                    __html: `
-                      (function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})
-                      (window,"_mgq");
-                    `,
-                  }}
-                />
+                <Script id="mgid-feed-load" strategy="afterInteractive">
+                  {`(function(w,q){w[q]=w[q]||[];w[q].push(["_mgc.load"])})(window,"_mgq");`}
+                </Script>
               </>
             ) : (
               <>
                 <div id="taboola-below-article-thumbnails" />
-                <Script
-                  id="taboola-below-flush"
-                  strategy="afterInteractive"
-                  dangerouslySetInnerHTML={{
-                    __html: `
-                      window._taboola = window._taboola || [];
-                      _taboola.push({
-                        mode: 'thumbs-feed-01',
-                        container: 'taboola-below-article-thumbnails',
-                        placement: 'Below Article Thumbnails',
-                        target_type: 'mix'
-                      });
-                      _taboola.push({ flush: true });
-                    `,
-                  }}
-                />
+                <Script id="taboola-end-init" strategy="afterInteractive">
+                  {`window._taboola = window._taboola || [];
+                    _taboola.push({ mode: 'thumbs-feed-01', container: 'taboola-below-article-thumbnails', placement: 'Below Article Thumbnails', target_type: 'mix' });
+                    _taboola.push({ flush: true });`}
+                </Script>
               </>
             )}
           </div>
@@ -380,23 +258,17 @@ export default function Page(props: PageProps) {
   );
 }
 
-/* ================== NEXT DATA ================== */
+/* ================== SERVER SIDE ================== */
 export async function getStaticPaths() {
   return { paths: [], fallback: "blocking" };
 }
 
 export async function getStaticProps({ params }: { params: any }) {
   try {
-    const slug = params?.slug as string | undefined;
-    const id = getIdFromSlug(slug);
-
-    // ✅ đổi API sang news-detailvip
-    const res = await fetch(
-      `${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`
-    );
+    const id = getIdFromSlug(params?.slug);
+    const res = await fetch(`${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`);
     const json = await res.json();
 
-    // ✅ bạn chỉ cần truyền 5 giá trị như yêu cầu
     const parameters: PageParameters = {
       mgWidgetId1: "1903360",
       mgWidgetFeedId: "1903357",
@@ -410,10 +282,9 @@ export async function getStaticProps({ params }: { params: any }) {
         data: json?.data ?? [],
         parameters,
       },
-      revalidate: 360000,
+      revalidate: 3600, // 1 hour
     };
   } catch (err) {
-    // fallback an toàn
     return {
       props: {
         data: [],
