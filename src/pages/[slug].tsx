@@ -188,7 +188,7 @@ export default function Page({ data, parameters }: PageProps) {
         {list.slice(0, visibleCount).map((article, idx) => (
           <div key={article.id || idx}>
             <ArticleItem article={article} idx={idx} isFirst={idx === 0} />
-            {idx === 0 && (
+            {/* {idx === 0 && (
               <>
                 {/* MID ADS */}
                 <div id="qctaboo-mid" className="my-10">
@@ -208,7 +208,7 @@ export default function Page({ data, parameters }: PageProps) {
                 {/* Điểm kích hoạt hiện Ads */}
                 <div id="ad-sentinel" style={{ height: "1px" }} />
               </>
-            )}
+            )} */}
             {idx < visibleCount - 1 && <hr style={{ margin: "50px 0", border: '0', borderTop: '2px dashed #eee' }} />}
           </div>
         ))}
