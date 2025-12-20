@@ -57,10 +57,8 @@ const getIdFromSlug = (slug?: string) => {
 };
 
 /* ================== SUB-COMPONENTS ================== */
-// Memoize ArticleItem để tránh render lại không cần thiết
 const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; idx: number; isFirst: boolean }) => (
-  <section className="container-flu details">
-    {/* Dynamic Banner Placement */}
+  <section className="container-flu details" style={{ marginBottom: '20px' }}>
     <div 
       className="adsconex-banner" 
       data-ad-placement={idx === 0 ? "banner1" : "banner10"} 
@@ -95,7 +93,7 @@ const ArticleItem = memo(({ article, idx, isFirst }: { article: NewsMainModel; i
       />
     </Suspense>
     
-    <hr style={{ margin: "40px 0", opacity: 0.2 }} />
+    {idx === 0 && <hr style={{ margin: "40px 0", border: '1px solid #eee' }} />}
   </section>
 ));
 
@@ -106,7 +104,6 @@ export default function Page({ data, parameters }: PageProps) {
   const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } = parameters;
   const useMgid = Number(isMgid) === 1;
 
-  // Xử lý list dữ liệu
   const list = useMemo(() => {
     const arr = Array.isArray(data) ? data : data ? [data] : [];
     return arr.map(normalize).filter((x) => x && !x.isDeleted);
@@ -118,33 +115,7 @@ export default function Page({ data, parameters }: PageProps) {
   const sentinelAdsRef = useRef<HTMLDivElement>(null);
   const triggerNextRef = useRef<HTMLDivElement>(null);
 
-  // 1. Tối ưu Iframe Resize
-  useEffect(() => {
-    const resizeIframes = () => {
-      const iframes = document.querySelectorAll("iframe");
-      const isMobile = window.innerWidth <= 525;
-      
-      iframes.forEach((iframe) => {
-        if (!iframe.src) return;
-        if (iframe.src.includes("twitter")) {
-          iframe.style.height = isMobile ? "650px" : "827px";
-          iframe.style.width = isMobile ? "100%" : "550px";
-        } else if (iframe.src.includes("instagram")) {
-          iframe.style.height = isMobile ? "553px" : "628px";
-          iframe.style.width = "100%";
-        } else {
-          iframe.style.height = isMobile ? "250px" : "300px";
-          iframe.style.width = "100%";
-        }
-      });
-    };
-
-    resizeIframes();
-    window.addEventListener('resize', resizeIframes);
-    return () => window.removeEventListener('resize', resizeIframes);
-  }, [visibleCount]);
-
-  // 2. Observer: Hiện End Ads khi cuộn đến cuối bài 1
+  // 1. Observer: Hiện phần quảng cáo khi cuộn gần hết bài 1
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -153,30 +124,52 @@ export default function Page({ data, parameters }: PageProps) {
           observer.disconnect();
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "100px" } // Kích hoạt sớm 100px trước khi tới
     );
 
     if (sentinelAdsRef.current) observer.observe(sentinelAdsRef.current);
     return () => observer.disconnect();
   }, []);
 
-  // 3. Observer: Bung toàn bộ bài viết khi thấy Ads (Thay thế scroll listener)
+  // 2. Observer: Bung bài 2 khi phần Ads hiện lên khoảng 30% viewport
   useEffect(() => {
     if (!showEndAds || visibleCount >= list.length) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
+        // Khi phần ads lọt vào vùng nhìn thấy 
         if (entry.isIntersecting) {
           setVisibleCount(list.length);
           observer.disconnect();
         }
       },
-      { threshold: 0.1 } 
+      { 
+        // rootMargin âm sẽ đẩy "vạch kích hoạt" lên cao hơn. 
+        // -30% có nghĩa là phần tử phải đi qua 30% chiều cao màn hình từ dưới lên mới kích hoạt
+        rootMargin: "0px 0px -30% 0px", 
+        threshold: 0 
+      }
     );
 
     if (triggerNextRef.current) observer.observe(triggerNextRef.current);
     return () => observer.disconnect();
   }, [showEndAds, list.length, visibleCount]);
+
+  // 3. Iframe Resize
+  useEffect(() => {
+    const iframes = document.querySelectorAll("iframe");
+    const isMobile = window.innerWidth <= 525;
+    iframes.forEach((iframe) => {
+      if (!iframe.src) return;
+      if (iframe.src.includes("twitter")) {
+        iframe.style.height = isMobile ? "650px" : "827px";
+        iframe.style.width = isMobile ? "100%" : "550px";
+      } else {
+        iframe.style.height = isMobile ? "250px" : "300px";
+        iframe.style.width = "100%";
+      }
+    });
+  }, [visibleCount]);
 
   const firstArticle = list[0];
 
@@ -184,11 +177,8 @@ export default function Page({ data, parameters }: PageProps) {
     <>
       <Head>
         <title>{firstArticle ? `${firstArticle.name} - ${firstArticle.userCode}` : "News"}</title>
-        {firstArticle?.avatarLink && <meta property="og:image" content={firstArticle.avatarLink} />}
-        {firstArticle && <meta property="og:title" content={`${firstArticle.name} - ${firstArticle.userCode}`} />}
       </Head>
 
-      {/* Scripts tối ưu */}
       {adsKeeperSrc && <Script src={adsKeeperSrc} strategy="afterInteractive" />}
       {googleTagId && (
         <>
@@ -212,8 +202,8 @@ export default function Page({ data, parameters }: PageProps) {
           />
         ))}
 
-        {/* MID ADS CONTAINER */}
-        <div id="qctaboo-mid" className="my-8">
+        {/* MID ADS */}
+        <div id="qctaboo-mid" className="my-8" style={{ minHeight: '50px' }}>
             {useMgid ? (
                 <div data-type="_mgwidget" data-widget-id={mgWidgetId1}></div>
             ) : (
@@ -228,12 +218,12 @@ export default function Page({ data, parameters }: PageProps) {
             </Script>
         </div>
 
-        {/* Sentinel để kích hoạt hiển thị Ads dưới bài */}
+        {/* Vạch kẻ để biết đã đọc xong bài 1 */}
         <div ref={sentinelAdsRef} style={{ height: "1px" }} />
 
-        {/* END ARTICLE ADS & TRIGGER NEXT ARTICLES */}
+        {/* END ADS & TRIGGER AREA */}
         {showEndAds && (
-          <div ref={triggerNextRef} className="end-article-ads" style={{ minHeight: '300px' }}>
+          <div ref={triggerNextRef} className="end-article-ads" style={{ minHeight: '200px', background: '#f9f9f9' }}>
             {useMgid ? (
               <>
                 <div data-type="_mgwidget" data-widget-id={mgWidgetFeedId} />
@@ -265,7 +255,8 @@ export async function getStaticPaths() {
 
 export async function getStaticProps({ params }: { params: any }) {
   try {
-    const id = getIdFromSlug(params?.slug);
+    const slug = params?.slug as string;
+    const id = getIdFromSlug(slug);
     const res = await fetch(`${process.env.APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`);
     const json = await res.json();
 
@@ -278,24 +269,12 @@ export async function getStaticProps({ params }: { params: any }) {
     };
 
     return {
-      props: {
-        data: json?.data ?? [],
-        parameters,
-      },
-      revalidate: 3600, // 1 hour
+      props: { data: json?.data ?? [], parameters },
+      revalidate: 3600,
     };
   } catch (err) {
     return {
-      props: {
-        data: [],
-        parameters: {
-          mgWidgetId1: "1903360",
-          mgWidgetFeedId: "1903357",
-          adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
-          googleTagId: "G-RZ218Z0QZ1",
-          isMgid: 0,
-        },
-      },
+      props: { data: [], parameters: { mgWidgetId1: "", mgWidgetFeedId: "", adsKeeperSrc: "", googleTagId: "", isMgid: 0 } },
       revalidate: 60,
     };
   }
