@@ -72,7 +72,7 @@ export default async function DetailArticlePage({ params }: PageProps) {
   return (
     <>
       <AdsKeeper src={adsKeeperSrc} />
-      <GoogleAnalytics tagId={googleTagId} />
+      {/* <GoogleAnalytics tagId={googleTagId} /> */}
 
       <AdsStateProvider>
         <main className="container mx-auto px-8 sm:px-20 lg:px-40 xl:px-56 py-10">
