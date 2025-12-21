@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 import { ArticleContent } from "./ArticleContent";
-import { SkeletonLoader } from "@/components/ui";
+import { useAdsState } from "@/store/AdsStateContext";
 import { Article } from "@/types/article";
 
 type RelatedArticleProps = {
@@ -12,42 +12,27 @@ type RelatedArticleProps = {
 export const RelatedArticle = memo(function RelatedArticle({
   article,
 }: RelatedArticleProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const currentRef = containerRef.current;
-    if (!currentRef) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.01 }
-    );
-
-    observer.observe(currentRef);
-
-    return () => observer.unobserve(currentRef);
-  }, []);
+  const { adsMoved } = useAdsState();
 
   return (
-    <div ref={containerRef} className="mt-12 pt-8 border-t-2 border-gray-200">
-      {!isVisible ? (
-        <div>
-          <SkeletonLoader type="text" />
-        </div>
-      ) : (
+    <div
+      style={{
+        maxHeight: adsMoved ? "none" : "0px",
+        overflow: adsMoved ? "visible" : "hidden",
+        opacity: adsMoved ? 1 : 0,
+        pointerEvents: adsMoved ? "auto" : "none",
+        transition: "opacity 0.2s ease",
+      }}
+      aria-hidden={!adsMoved}
+    >
+      <div className="mt-12 pt-8 border-t-2 border-gray-200">
         <ArticleContent
           title={article.name}
           datePosted={article.dateTimeStart}
           htmlContent={article.content}
           showVideo={false}
         />
-      )}
+      </div>
     </div>
   );
 });

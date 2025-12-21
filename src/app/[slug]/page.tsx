@@ -5,9 +5,9 @@ import { GoogleAnalytics, AdsKeeper } from "@/components/ads";
 import { SkeletonLoader } from "@/components/ui";
 import {
   ArticleContent,
-  LazyRelatedArticle,
   AdsContainer,
   AdsSection,
+  RelatedArticle,
 } from "@/components/article";
 import { AdsStateProvider } from "@/store/AdsStateContext";
 import { getArticles } from "@/services/get-article";
@@ -84,8 +84,8 @@ export default async function DetailArticlePage({ params }: PageProps) {
             <AdsSection useMgid={useMgid} mgWidgetId1={mgWidgetId1} />
           </Suspense>
 
-          {/* Lazy load the second article if exists */}
-          {relatedArticle && <LazyRelatedArticle article={relatedArticle} />}
+          {/* Article 2 - always render HTML but clipped until ads move */}
+          {relatedArticle && <RelatedArticle article={relatedArticle} />}
 
           {/* Unified ads container - partial then full */}
           <AdsContainer useMgid={useMgid} mgWidgetFeedId={mgWidgetFeedId} />

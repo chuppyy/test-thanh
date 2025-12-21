@@ -1,3 +1,4 @@
+import { VARIABLES } from "@/constant/variables";
 import { Article } from "@/types/article";
 import { extractIdFromSlug } from "@/utils/data";
 import { unstable_cache } from "next/cache";
@@ -12,7 +13,7 @@ type ArticleResponse = {
 export const fetchArticlesFromAPI = async (id: string): Promise<Article[]> => {
   try {
     const response = await fetch(
-      `https://apisport.vbonews.com/News/news-detailvip?id=${encodeURIComponent(id)}`,
+      `${VARIABLES.NEXT_PUBLIC_APP_API}/News/news-detailvip?id=${encodeURIComponent(id)}`,
       {
         cache: "no-store",
       }

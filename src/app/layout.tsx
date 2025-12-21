@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Navbar, Footer } from "@/components/layout";
+import { VARIABLES } from "@/constant/variables";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
   description: "News website",
   verification: {
     other: {
-      verification: ["LWw9ipN7kY"],
+      verification: [VARIABLES.VERIFICATION_CODE],
     },
   },
 };
