@@ -12,9 +12,7 @@ type ArticleResponse = {
 export const fetchArticlesFromAPI = async (id: string): Promise<Article[]> => {
   try {
     const response = await fetch(
-      `${
-        process.env.NEXT_PUBLIC_APP_API
-      }/News/news-detailvip?id=${encodeURIComponent(id)}`,
+      `https://apisport.vbonews.com/News/news-detailvip?id=${encodeURIComponent(id)}`,
       {
         cache: "no-store",
       }
