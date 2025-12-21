@@ -22,7 +22,7 @@ const bannerImages = [
 
 async function getNewsList(): Promise<NewsGroup[]> {
   try {
-    const response = await fetch(`${process.env.APP_API2}/News/news-list`, {
+    const response = await fetch(`https://apisport.vbonews.com/News/news-list`, {
       next: { revalidate: 3600 },
     });
     const data = await response.json();
