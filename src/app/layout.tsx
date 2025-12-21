@@ -68,7 +68,7 @@ export default function RootLayout({
             }(
               document.createElement('script'),
               document.getElementsByTagName('script')[0],
-              '//cdn.taboola.com/libtrc/metaconex-anhusfejiio/loader.js',
+              '//cdn.taboola.com/libtrc/metaconex-${VARIABLES.DOMAIN}fejiio/loader.js',
               'tb_loader_script'
             );
 

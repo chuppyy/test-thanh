@@ -11,6 +11,7 @@ import {
 } from "@/components/article";
 import { AdsStateProvider } from "@/store/AdsStateContext";
 import { getArticles } from "@/services/get-article";
+import { VARIABLES } from "@/constant/variables";
 
 const defaultParameters = {
   videoScriptSrc:
@@ -19,10 +20,10 @@ const defaultParameters = {
   googleClientSlotId: "9127559985",
   googleAdSlot: "1932979136",
   mgWidgetId1: "1903360",
-  mgWidgetId2: "1903360",
-  mgWidgetFeedId: "1903357",
-  adsKeeperSrc: "https://jsc.mgid.com/site/1066309.js",
-  googleTagId: "G-5T8RGH9Y7E",
+  mgWidgetId2: VARIABLES.mgWidgetId2,
+  mgWidgetFeedId: VARIABLES.mgWidgetFeedId,
+  adsKeeperSrc: VARIABLES.adsKeeperSrc,
+  googleTagId: VARIABLES.GOOGLE_ANALYSIS,
   isMgid: 0,
 } as const;
 
