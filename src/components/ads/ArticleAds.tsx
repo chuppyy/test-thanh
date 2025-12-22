@@ -40,6 +40,7 @@ export const ArticleEndAds = ({
       container="taboola-below-article-thumbnails"
       placement="Below Article Thumbnails"
       mode="thumbs-feed-01"
+      flush={true}
     />
   );
 };

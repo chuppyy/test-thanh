@@ -1,17 +1,7 @@
 import React from "react";
 import { BannerCard, NewsCard } from "@/components/cards";
-import { VARIABLES } from "@/constant/variables";
-
-type NewsItem = {
-  id: string;
-  name: string;
-  avatarLink: string;
-};
-
-type NewsGroup = {
-  groupName: string;
-  detail: NewsItem[];
-};
+import { getNewsList } from "@/services/get-article";
+import { NewsGroup, NewsItem } from "@/types/article";
 
 const bannerImages = [
   { src: "/hinh0.png", alt: "Banner 0", size: "large" as const },
@@ -20,19 +10,6 @@ const bannerImages = [
   { src: "/hinh3.png", alt: "Banner 3" },
   { src: "/hinh4.png", alt: "Banner 4" },
 ];
-
-async function getNewsList(): Promise<NewsGroup[]> {
-  try {
-    const response = await fetch(`${VARIABLES.APP_API2}/News/news-list`, {
-      next: { revalidate: 3600 },
-    });
-    const data = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error("Error fetching data:", error);
-    return [];
-  }
-}
 
 export default async function HomePage() {
   const data = await getNewsList();

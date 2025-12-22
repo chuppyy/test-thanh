@@ -13,7 +13,7 @@ export const TaboolaAd = ({
   container,
   placement,
   mode = "thumbs-feed-01",
-  flush = false,
+  flush = true,
 }: TaboolaAdProps) => {
   const uniqueId = useId().replace(/:/g, "-");
   const containerId = `${container}-${uniqueId}`;

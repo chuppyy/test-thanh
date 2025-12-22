@@ -5,3 +5,14 @@ export type Article = {
   content: string;
   userCode: string;
 };
+
+export type NewsItem = {
+  id: string;
+  name: string;
+  avatarLink: string;
+};
+
+export type NewsGroup = {
+  groupName: string;
+  detail: NewsItem[];
+};

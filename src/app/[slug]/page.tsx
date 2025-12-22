@@ -1,29 +1,33 @@
 import { Suspense } from "react";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { GoogleAnalytics, AdsKeeper } from "@/components/ads";
+import Script from "next/script";
 import { SkeletonLoader } from "@/components/ui";
 import {
   ArticleContent,
   AdsContainer,
   AdsSection,
   RelatedArticle,
+  IframeAdjuster,
 } from "@/components/article";
 import { AdsStateProvider } from "@/store/AdsStateContext";
 import { getArticles } from "@/services/get-article";
 import { VARIABLES } from "@/constant/variables";
 
 const defaultParameters = {
-  videoScriptSrc:
-    "https://videoadstech.org/ads/topnews_livextop_com.0a05145f-8239-4054-9dc9-acd55fcdddd5.video.js",
-  googleClientId: "ca-pub-2388584177550957",
-  googleClientSlotId: "9127559985",
-  googleAdSlot: "1932979136",
-  mgWidgetId1: "1903360",
+  videoScriptSrc: VARIABLES.videoScriptSrc,
+
+  googleClientId: VARIABLES.googleClientId,
+  googleClientSlotId: VARIABLES.googleClientSlotId,
+  googleAdSlot: VARIABLES.googleAdSlot,
+
+  mgWidgetId1: VARIABLES.mgWidgetId1,
   mgWidgetId2: VARIABLES.mgWidgetId2,
   mgWidgetFeedId: VARIABLES.mgWidgetFeedId,
+
   adsKeeperSrc: VARIABLES.adsKeeperSrc,
   googleTagId: VARIABLES.GOOGLE_ANALYSIS,
+
   isMgid: 0,
 } as const;
 
@@ -46,7 +50,11 @@ export const generateMetadata = async ({
   const article = articles[0];
 
   return {
-    title: `${article.name} | NewsEdge`,
+    title: `${article.name}-${article.userCode}`,
+    openGraph: {
+      title: `${article.name}-${article.userCode}`,
+      images: [article.avatarLink],
+    },
   };
 };
 
@@ -64,15 +72,35 @@ export default async function DetailArticlePage({ params }: PageProps) {
   // Second article
   const relatedArticle = articles[1];
 
-  const { mgWidgetId1, mgWidgetFeedId, adsKeeperSrc, googleTagId, isMgid } =
-    defaultParameters;
+  const {
+    mgWidgetId1,
+    // mgWidgetId2,
+    mgWidgetFeedId,
+    adsKeeperSrc,
+    googleTagId,
+    isMgid,
+  } = defaultParameters;
 
   const useMgid = Number(isMgid) === 1;
 
   return (
     <>
-      <AdsKeeper src={adsKeeperSrc} />
-      {/* <GoogleAnalytics tagId={googleTagId} /> */}
+      <Script src={adsKeeperSrc} async></Script>
+      <Script
+        id="gg-1"
+        strategy="lazyOnload"
+        src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
+      />
+      <Script id="gg-2" strategy="lazyOnload">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${googleTagId}');
+        `}
+      </Script>
+
+      <IframeAdjuster />
 
       <AdsStateProvider>
         <main className="container mx-auto px-8 sm:px-20 lg:px-40 xl:px-56 py-10">

@@ -40,20 +40,15 @@ export default function RootLayout({
         <link rel="preconnect" href="https://cdn.unibots.in" />
         <link rel="preconnect" href="https://cdn.taboola.com" />
         <link rel="preconnect" href="https://apisport.vbonews.com" />
-
-        {/* Google Tag Manager Script */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${VARIABLES.GOOGLE_ANALYSIS}`}
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', ${VARIABLES.GOOGLE_ANALYSIS});
-          `}
-        </Script>
+        {/* External ad scripts - async to not block render */}
+        <script
+          async
+          src="https://cdn.unibotscdn.com/player/mvp/player.js"
+        ></script>
+        <script
+          async
+          src="https://cdn.unibots.in/headerbidding/common/hb.js"
+        ></script>
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
@@ -73,7 +68,7 @@ export default function RootLayout({
             }(
               document.createElement('script'),
               document.getElementsByTagName('script')[0],
-              '//cdn.taboola.com/libtrc/metaconex-${VARIABLES.DOMAIN}/loader.js',
+              '//cdn.taboola.com/libtrc/metaconex-anhusfejiio/loader.js',
               'tb_loader_script'
             );
 
