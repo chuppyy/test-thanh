@@ -1,6 +1,7 @@
 import { VARIABLES } from "@/constant/variables";
 import { Article, NewsGroup } from "@/types/article";
 import { extractIdFromSlug } from "@/utils/data";
+import { fetchWithRetry } from "@/utils/fetch-helper";
 import { unstable_cache } from "next/cache";
 
 type ArticleResponse = {
@@ -12,12 +13,15 @@ type ArticleResponse = {
  */
 export const fetchArticlesFromAPI = async (id: string): Promise<Article[]> => {
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `${
-        VARIABLES.NEXT_PUBLIC_APP_API
+        VARIABLES.nextPublicAppApi
       }/News/news-detailvip?id=${encodeURIComponent(id)}`,
       {
         cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
       }
     );
 
@@ -51,7 +55,8 @@ export const getArticles = async (slug: string): Promise<Article[]> => {
     },
     [`articles-${id}`],
     {
-      revalidate: 600,
+      // Cache for 100 hours - long cache for article details
+      revalidate: 360000,
       tags: [`articles-${id}`],
     }
   );
@@ -69,7 +74,7 @@ export const getArticles = async (slug: string): Promise<Article[]> => {
  */
 export const getNewsList = async (): Promise<NewsGroup[]> => {
   try {
-    const response = await fetch(`${VARIABLES.APP_API2}/News/news-list`, {
+    const response = await fetch(`${VARIABLES.appApi2}/News/news-list`, {
       next: { revalidate: 3600 },
     });
     const data = await response.json();

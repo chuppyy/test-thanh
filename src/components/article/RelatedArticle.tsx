@@ -30,7 +30,6 @@ export const RelatedArticle = memo(function RelatedArticle({
           title={article.name}
           datePosted={article.dateTimeStart}
           htmlContent={article.content}
-          showVideo={false}
         />
       </div>
     </div>

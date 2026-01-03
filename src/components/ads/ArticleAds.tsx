@@ -2,6 +2,7 @@
 
 import { TaboolaAd } from "./TaboolaAd";
 import { MidAd } from "./MgidAd";
+import { VARIABLES } from "@/constant/variables";
 
 type ArticleAdsProps = {
   useMgid: boolean;
@@ -12,7 +13,7 @@ type ArticleAdsProps = {
 
 export const ArticleMidAds = ({
   useMgid,
-  mgWidgetId1 = "1903360",
+  mgWidgetId1 = VARIABLES.mgWidgetId1,
 }: ArticleAdsProps) => {
   if (useMgid) {
     return <MidAd widgetId={mgWidgetId1} />;
@@ -29,7 +30,7 @@ export const ArticleMidAds = ({
 
 export const ArticleEndAds = ({
   useMgid,
-  mgWidgetFeedId = "1903357",
+  mgWidgetFeedId = VARIABLES.mgWidgetFeedId,
 }: ArticleAdsProps) => {
   if (useMgid) {
     return <MidAd widgetId={mgWidgetFeedId} />;

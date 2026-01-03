@@ -37,6 +37,7 @@ export const NewsCard = memo(function NewsCard({
     <Link
       href={`/${id}`}
       className="w-full sm:w-[48%] lg:w-[23%] flex flex-col bg-white rounded-lg shadow-sm cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 no-underline"
+      prefetch={false}
     >
       <div className="relative aspect-square overflow-hidden rounded-t-lg bg-gray-100">
         {(isLoading || hasError) && <ImageLoader size="md" />}
@@ -51,6 +52,9 @@ export const NewsCard = memo(function NewsCard({
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 48vw, 23vw"
             priority={priority}
             loading={priority ? "eager" : "lazy"}
+            quality={75}
+            placeholder="blur"
+            blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YzZjRmNiIvPjwvc3ZnPg=="
             onError={handleError}
             onLoad={handleLoad}
             unoptimized

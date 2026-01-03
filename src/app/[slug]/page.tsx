@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Script from "next/script";
 import { SkeletonLoader } from "@/components/ui";
 import {
   ArticleContent,
@@ -12,7 +11,7 @@ import {
 } from "@/components/article";
 import { AdsStateProvider } from "@/store/AdsStateContext";
 import { getArticles } from "@/services/get-article";
-import { VARIABLES } from "@/constant/variables";
+import { SCRIPTS, VARIABLES } from "@/constant/variables";
 
 const defaultParameters = {
   videoScriptSrc: VARIABLES.videoScriptSrc,
@@ -26,8 +25,9 @@ const defaultParameters = {
   mgWidgetFeedId: VARIABLES.mgWidgetFeedId,
 
   adsKeeperSrc: VARIABLES.adsKeeperSrc,
-  googleTagId: VARIABLES.GOOGLE_ANALYSIS,
+  googleTagId: VARIABLES.googleAnalytics,
 
+  // <-- set isMgid = 1 to use MGID, = 0 to use Taboola
   isMgid: 0,
 } as const;
 
@@ -50,9 +50,9 @@ export const generateMetadata = async ({
   const article = articles[0];
 
   return {
-    title: `${article.name}-${article.userCode}`,
+    title: `${article.name + "-" + article.userCode}`,
     openGraph: {
-      title: `${article.name}-${article.userCode}`,
+      title: `${article.name + "-" + article.userCode}`,
       images: [article.avatarLink],
     },
   };
@@ -72,33 +72,18 @@ export default async function DetailArticlePage({ params }: PageProps) {
   // Second article
   const relatedArticle = articles[1];
 
-  const {
-    mgWidgetId1,
-    // mgWidgetId2,
-    mgWidgetFeedId,
-    adsKeeperSrc,
-    googleTagId,
-    isMgid,
-  } = defaultParameters;
+  const { mgWidgetId1, mgWidgetFeedId, isMgid } = defaultParameters;
 
   const useMgid = Number(isMgid) === 1;
 
   return (
     <>
-      <Script src={adsKeeperSrc} async></Script>
-      <Script
-        id="gg-1"
-        strategy="lazyOnload"
-        src={`https://www.googletagmanager.com/gtag/js?id=${googleTagId}`}
-      />
-      <Script id="gg-2" strategy="lazyOnload">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', '${googleTagId}');
-        `}
-      </Script>
+      {/* Load all scripts at the top */}
+      {SCRIPTS.adsKeeperScript}
+      {SCRIPTS.googleAnalyticsScript}
+      {SCRIPTS.adsconexPlayerScript}
+      {SCRIPTS.adsconexBannerScript}
+      {SCRIPTS.googleAdManagerScript}
 
       <IframeAdjuster />
 

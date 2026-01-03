@@ -1,12 +1,11 @@
 "use client";
 
-import { memo, useEffect, useMemo } from "react";
+import { memo, useMemo } from "react";
 
 type ArticleContentProps = {
   title: string;
   datePosted: string;
   htmlContent: string;
-  showVideo?: boolean;
 };
 
 const formatDate = (str: string) => {
@@ -42,68 +41,21 @@ export const ArticleContent = memo(function ArticleContent({
   title,
   datePosted,
   htmlContent,
-  showVideo = true,
 }: ArticleContentProps) {
   const normalizedContent = useMemo(
     () => normalizeHtmlContent(htmlContent),
     [htmlContent]
   );
 
-  // Initialize FEJI ads on mount - only runs on client
-  useEffect(() => {
-    // If not show video, skip FEJI video player init
-    if (!showVideo) return;
-
-    // FEJI Banner
-    if (typeof window !== "undefined") {
-      window.unibotshb = window.unibotshb || { cmd: [] };
-      window.unibotshb.cmd.push(() => {
-        if (typeof window.ubHB === "function") {
-          window.ubHB("feji.io_long");
-        }
-      });
-
-      // FEJI Video Player
-      window.unibots = window.unibots || { cmd: [] };
-      window.unibots.cmd.push(() => {
-        if (typeof window.unibotsPlayer === "function") {
-          window.unibotsPlayer("feji.io_1723454353847");
-        }
-      });
-    }
-
-    // Cleanup on unmount
-    return () => {
-      // Clear FEJI containers
-      const fejiBanner = document.getElementById("ub-banner1");
-      if (fejiBanner) {
-        fejiBanner.innerHTML = "";
-      }
-      const fejiPlayer = document.getElementById(
-        "div-ub-feji.io_1723454353847"
-      );
-      if (fejiPlayer) {
-        fejiPlayer.innerHTML = "";
-      }
-    };
-  }, [showVideo]);
-
   return (
     <>
-      {/* Ad banner placeholder - use banner10 for article 2 when showVideo=false */}
-      <div
-        className="adsconex-banner mb-4"
-        data-ad-placement={showVideo ? "banner1" : "banner10"}
-        id={showVideo ? "ub-banner1" : "ub-banner10"}
-      />
-
+      <div id="div_adsconex_banner_responsive_1"></div>
       {/* Article Title */}
       <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6 leading-tight">
         {title}
       </h1>
 
-      {/* FEJI Video Player Container */}
-      {showVideo && <div id="div-ub-feji.io_1723454353847" className="mb-4" />}
+      <div id="adsconex-video-container"></div>
 
       {/* Posted Date */}
       <p className="mb-10 text-gray-500 text-lg">
